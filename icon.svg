@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="NovaFlow">
+  <!-- 背景 -->
+  <rect width="64" height="64" rx="14" fill="#000"/>
+
+  <!-- 主图标 - 流动的数据流 -->
+  <g transform="translate(12, 16)">
+    <!-- 左侧节点 -->
+    <circle cx="4" cy="16" r="3" fill="#4A90E2" opacity="0.9"/>
+
+    <!-- 中间流动线条 -->
+    <path d="M 7 16 Q 15 10, 23 16" stroke="#4A90E2" stroke-width="2" fill="none" opacity="0.7"/>
+    <path d="M 7 16 Q 15 22, 23 16" stroke="#60D0A0" stroke-width="2" fill="none" opacity="0.7"/>
+
+    <!-- 中间节点 -->
+    <circle cx="23" cy="16" r="2.5" fill="#60D0A0" opacity="0.9"/>
+
+    <!-- 右侧流动线条 -->
+    <path d="M 25.5 16 Q 30 12, 35 16" stroke="#60D0A0" stroke-width="2" fill="none" opacity="0.7"/>
+    <path d="M 25.5 16 Q 30 20, 35 16" stroke="#9B6DD6" stroke-width="2" fill="none" opacity="0.7"/>
+
+    <!-- 右侧节点 -->
+    <circle cx="36" cy="16" r="3" fill="#9B6DD6" opacity="0.9"/>
+
+    <!-- 装饰性的小点 -->
+    <circle cx="15" cy="12" r="1" fill="#4A90E2" opacity="0.6"/>
+    <circle cx="15" cy="20" r="1" fill="#60D0A0" opacity="0.6"/>
+    <circle cx="30" cy="13" r="1" fill="#60D0A0" opacity="0.6"/>
+    <circle cx="30" cy="19" r="1" fill="#9B6DD6" opacity="0.6"/>
+  </g>
+
+  <!-- 文字标识 (可选) -->
+  <text x="32" y="52" text-anchor="middle" fill="#fff" font-size="8" font-weight="600" font-family="system-ui, -apple-system, sans-serif">
+    NOVA
+  </text>
+</svg>

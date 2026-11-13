@@ -1,0 +1,13 @@
+- id: ui-settings-account
+  disabled: true
+- id: ui-account-notifications
+  disabled: true
+- id: magpie-mcp-magpie-image
+  disabled: true
+- insert:
+    - id: novaflow-account
+      name: '@local/novaflow-dsh-plugin'
+      config:
+        contextWindow: 32768
+        maxTokens: 4096
+        modelsRefreshInterval: 600000

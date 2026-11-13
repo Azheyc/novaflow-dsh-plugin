@@ -1,0 +1,38 @@
+# 依赖
+node_modules/
+.pnpm-debug.log
+
+# 构建产物
+dist/
+build/
+*.tgz
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 测试
+coverage/
+.nyc_output/
+
+# 临时文件
+*.log
+*.tmp
+.env
+.env.*
+!.env.example
+.novaflow-media/
+generated-images/
+generated-videos/
+release-artifacts/
+
+# 开发
+src/**/*.test.js
+src/**/*.spec.js
