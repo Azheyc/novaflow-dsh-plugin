@@ -1,6 +1,6 @@
 # NovaFlow 插件文档索引
 
-适用版本：NovaFlow 插件 **2.5.0**，DeepSeek Harness **0.2.2-rc.2、0.2.2-rc.3**，Node.js **24 及以上**。核对日期：2026-11-16。
+适用版本：NovaFlow 插件 **2.6.0**，DeepSeek Harness **0.2.2-rc.2、0.2.2-rc.3**，Node.js **24 及以上**。核对日期：2026-11-16。
 
 本文档描述独立的 DSH 插件包 `@local/novaflow-dsh-plugin`。平台文档中已归档的旧 DSH 桌面客户端是另一项目，不能用其交付记录证明本插件状态。
 
@@ -11,6 +11,8 @@
 | 了解功能、登录、配置模型和生成媒体 | [使用说明](../README.md) |
 | 首次安装、升级或停用 | [安装与快速开始](GETTING_STARTED.md#安装升级与停用) |
 | 首次使用的最短操作路径 | [首次使用](GETTING_STARTED.md#首次使用) |
+| 查看个人／企业余额与成员限额 | [查看与刷新余额](GETTING_STARTED.md#查看与刷新余额) |
+| 排查余额不可用、旧数据和单位 | [余额显示与刷新](TROUBLESHOOTING.md#余额显示与刷新) |
 | 理解源码、配置、鉴权和生命周期 | [开发手册](DEVELOPMENT.md) |
 | 修改后验证、打包和确认实际加载版本 | [测试与发布](RELEASE.md) |
 | 排查登录、界面、模型、安装和 MCP 故障 | [故障排查](TROUBLESHOOTING.md) |
@@ -22,6 +24,7 @@
 ## 当前行为基线
 
 - NovaFlow 浏览器 PKCE 授权；设备凭据由 DSH Credentials 服务保存。
+- New API既有 `plugin/usage` 以 `nfds_` 设备access读取个人／公司共享钱包；主显可用、总额／冻结与更新时间，CNY金额直接展示，成员限额另列。`refresh_balance`独立刷新；UI轮询只读Host，读取失败不影响模型登录、旧数据标旧，无数据不显示假0。退出／拒绝／换身份清理旧余额。
 - 模型交给官方“设置 → 模型”管理；Claude系列采用 Anthropic Messages，其他文本模型采用 OpenAI Responses。家族策略一次迁移旧协议，保留source标识，混合source按家族拆分并保留原生名称、容量、删除和overrides；迁移后保留用户原生编辑。
 - `migrate_protocols`仅迁移旧协议，保留已有图片／思考设置语义，可离线处理已保存受管配置且不发布缓存桥权限；`configure_models`显式重新启用图片和协议原生思考档位。Claude使用官方metadata，off为null，未知型号不假定思考／adaptive支持。
 - 拆分时默认模型迁至新提供商；已有会话引用被拆走的模型时需重新选择。模型显示原始ID，计费路由按授权group区分。
@@ -37,4 +40,4 @@
 4. 历史验证保留原结论与日期；新行为以当前版本章节为准。2.3 的登录后直接安装已被 2.4 的确认门槛取代。
 5. 文档、示例和诊断材料只记录凭据名称及脱敏摘要，不复制设备令牌、连接密钥或网页登录会话。
 
-2.5.0已完成190项完整测试、官方应用及7个本地Claude模型的离线协议迁移。账户仍为AUTH_REQUIRED，MCP同名冲突仍在，未执行付费请求或视觉实机验收。实际版本、迁移与Client资源证据见验证记录。此前文档整理及GitHub首次发布属于2.4.0历史，公开仓库和下载入口见[项目首页](../README.md)，分版本证据见[验证记录](../VERIFICATION.md)。
+2.6.0最终完整212项测试全部通过（原190项＋Client VM 10项＋Host／parser／生命周期12项），两次官方应用均applied且无warnings。实际Client revision为 `f92ee7b36197`，GET200、42840bytes，含余额卡与刷新／限额／旧数据组件。实际state仍为AUTH_REQUIRED、balance=null，`refresh_balance`返回AUTH_REQUIRED；真实在线金额必须待用户重新授权后验收，不自动登录／退出，未实际截图或点击。2.5.0的190项完整测试、官方应用及7个本地Claude离线迁移属于历史证据；MCP同名冲突、付费请求和视觉实机边界以[验证记录](../VERIFICATION.md)分版本说明为准。公开仓库和下载入口见[项目首页](../README.md)。

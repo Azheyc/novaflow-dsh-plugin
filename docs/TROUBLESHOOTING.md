@@ -1,10 +1,10 @@
 # 故障排查
 
-适用：插件 2.5.0，DSH 0.2.2-rc.2／0.2.2-rc.3。先记录插件版本、DSH 版本、操作系统、错误码和脱敏状态；定位源码见[开发手册](DEVELOPMENT.md)，实际分发核验见[测试与发布](RELEASE.md)。
+适用：插件 2.6.0，DSH 0.2.2-rc.2／0.2.2-rc.3。先记录插件版本、DSH 版本、操作系统、错误码和脱敏状态；定位源码见[开发手册](DEVELOPMENT.md)，实际分发核验见[测试与发布](RELEASE.md)。
 
 ## 优先检查的状态
 
-只读调用 `novaflow_account` 的 `state`。检查结果中的 `connected`、`error`、`nativeProviders`、`media.mcp`、`pluginSetup`、`delivery`。状态读取不会安装插件，也不会调用付费模型。
+只读调用 `novaflow_account` 的 `state`。检查结果中的 `connected`、`error`、`balance`、`nativeProviders`、`media.mcp`、`pluginSetup`、`delivery`。状态读取不会安装插件，也不会调用付费模型。
 
 诊断时不要复制 Credentials 原始记录、Authorization header、Cookie、授权码或完整回调查询。允许记录凭据名称、公开包名、错误码、版本、安装 request ID 和脱敏摘要。
 
@@ -33,7 +33,22 @@
 | 取消后旧回调到达 | 当前代次应拒绝旧回调；重新从账户页发起，检查 attempt ID 和卸载／取消的晚到结果保护 |
 | 退出提示远端撤销失败 | 本机清理与平台撤销分别判断。到平台“安全与访问”手动撤销当前设备，不要求删除后台专属模型 Key |
 
-平台暂未提供设备余额接口。账户页链接平台查看余额，不显示余额不能通过填零或虚构 API 修复。
+## 余额显示与刷新
+
+2.6.0余额来自 NovaFlow New API 已有的 `GET /api/novaflow/v1/plugin/usage`，使用 `nfds_` 设备 access。标准 `/v1/dashboard/billing/subscription`／`usage` 不接受 creator 令牌，也不适用于企业钱包；不要改用网页登录 Cookie、PAT 或后台模型 Key，不需要修改后端。
+
+| 现象／状态 | 检查与处理 |
+|---|---|
+| 余额 error／unavailable，但模型已登录 | 余额读取与模型登录独立。核对当前Host余额错误和平台响应，用“刷新余额”或 `refresh_balance` 单独重试；失败不能填0，也不应清除正常模型连接 |
+| 有旧金额并提示更新失败 | 上次成功数据被保留且明确标旧。核对 `as_of`，重试成功前不要当作当前金额 |
+| `AUTH_REQUIRED`，没有真实在线余额 | 由用户按授权流程清理旧凭据并重新登录后再验收；不自动登录／退出，也不把历史金额当作本轮结果 |
+| 金额倍数错误 | `balance`、`frozen`、`available` 已是服务端换算的CNY decimal字符串，客户端不再除以 `QuotaPerUnit` 或乘汇率 |
+| 企业余额与个人钱包不同 | 按 `account_mode` 读取 `personal`／`company`；企业页显示公司共享钱包，不应套用个人余额 |
+| 成员限额与公司总额不同 | 日／月限额、`used`、`remaining` 是成员约束，不能替代公司钱包余额；null／不限额不能当0，`canUse=false` 提示额度限制 |
+| 页面每约1.8秒更新 | UI轮询只查询Host状态；登录、账户刷新、默认每10分钟后台刷新后非阻塞读取平台余额，或由按钮单独刷新，不应每次UI轮询都访问平台 |
+| 退出／拒绝授权／换身份后旧金额又出现 | 余额应清除，旧请求中止或晚到结果被忽略。记录代次与脱敏状态排查，不能继续展示上一身份的钱包 |
+
+读取余额无需付费模型请求。隔离测试、HTTP200、资源内容或Slot active均不能代替用户重新授权后对照平台金额的现场验收。
 
 ## 原生模型与请求
 
@@ -46,7 +61,7 @@
 | 想重新启用图片和思考档位 | `configure_models`显式重设家族协议，并重新启用text/image和协议原生档位；普通刷新不会执行相同覆盖 |
 | 只想修正旧统一Responses协议 | 使用HTTP或Agent动作 `migrate_protocols`，仅一次家族迁移，保留已有图片／思考设置语义；跨协议值按目标协议转换，清理不适用compat |
 | 未登录或AUTH_REQUIRED时需要迁移 | 2.5.0可离线编辑已保存受管配置，无需为迁移重新授权；离线不发布cached桥权限，成功只证明配置已保存，不能证明账户或模型请求可用 |
-| Claude仍显示Responses或名称带vendor前缀 | 先核对实际delivery为2.5.0与迁移策略。Claude识别不区分大小写，支持原始ID开头及常见vendor前缀／冒号／点；已应用策略后的手工协议编辑会保留，需重设时显式configure_models |
+| Claude仍显示Responses或名称带vendor前缀 | 先核对实际delivery为当前2.6.0与已保存迁移策略。Claude识别不区分大小写，支持原始ID开头及常见vendor前缀／冒号／点；已应用策略后的手工协议编辑会保留，需重设时显式configure_models |
 | 升级后出现家族child提供商 | 混合source按家族确定性拆分，纯家族保留source原地更新。核对名称、容量、删除和overrides按家族保留，不按显示名合并路由 |
 | 旧会话模型找不到，默认模型却正常 | 默认同模型会迁至新提供商；已有会话若引用被拆走模型，需在该会话重新选择 |
 | 手动删除后未被目录同步加回 | 这是保留用户删除的行为。使用官方获取模型／手动添加；删除提供商后可重新登录配置 |

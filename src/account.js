@@ -1,5 +1,6 @@
 import { platform, hostname } from 'node:os'
 import { ORIGIN, PREFIX, RECORD, NovaError, safeCode, nonce, challenge, equalSecret, callbackOrigin, authorizationUrl, tokenPair, storedGrant } from './protocol.js'
+import { parseBalance } from './balance.js'
 
 /** Owns one device grant. UI snapshots never contain either token or the PKCE verifier. */
 export class NovaAccount {
@@ -8,6 +9,7 @@ export class NovaAccount {
     this.state = { connected: false, hasCredential: false, account: null, models: [], attempt: null, balance: null, error: null, warning: null, revision: 0 }
     this.generation = 0; this.pending = null; this.disposed = false; this.refreshing = null; this.rotation = null
     this.controller = new AbortController()
+    this.balanceRefreshing = null; this.balanceController = null; this.signingOut = false
   }
   publish(patch) { this.state = { ...this.state, ...patch, revision: this.state.revision + 1 }; return this.snapshot() }
   snapshot() { return structuredClone(this.state) }
@@ -18,7 +20,7 @@ export class NovaAccount {
     else if (grant) this.publish({ error: 'AUTH_REQUIRED' })
     return this.snapshot()
   }
-  assertActive() { if (this.disposed) throw new NovaError('CANCELLED') }
+  assertActive() { if (this.disposed) throw new NovaError('CANCELLED'); if (this.signingOut) throw new NovaError('AUTH_REQUIRED') }
   async start() {
     this.assertActive()
     if (this.state.connected || storedGrant(await this.credentials.readRecord(RECORD))) throw new NovaError('SIGNOUT_REQUIRED')
@@ -114,6 +116,41 @@ export class NovaAccount {
     if (!committed) { await this.revoke(pair).catch(() => {}); throw new NovaError('AUTH_REQUIRED') }
     return pair.accessToken
   }
+  resetBalance() {
+    this.balanceController?.abort()
+    this.balanceController=null;this.balanceRefreshing=null
+  }
+  async refreshBalance() {
+    this.assertActive()
+    if (!this.state.connected) throw new NovaError('AUTH_REQUIRED')
+    if (this.balanceRefreshing) return this.balanceRefreshing
+    const generation=this.generation,scope=this.state.account?.role,previous=this.state.balance?.data || null
+    const controller=new AbortController()
+    this.balanceController=controller
+    this.publish({balance:{status:'loading',data:previous,error:null,refreshing:true}})
+    const work=(async()=>{
+      try {
+        const token=await this.accessToken()
+        if (generation!==this.generation || this.disposed || controller.signal.aborted) throw new NovaError('CANCELLED')
+        const raw=await this.api.request(PREFIX+'/plugin/usage',{token,signal:AbortSignal.any([this.controller.signal,controller.signal])})
+        const mode=scope==='personal' ? 'personal' : scope?.startsWith('enterprise:') ? 'enterprise' : null
+        if (!mode) throw new NovaError('INVALID_RESPONSE')
+        const data=parseBalance(raw,mode)
+        if (generation===this.generation && !this.disposed && !controller.signal.aborted && this.state.connected && this.state.account?.role===scope) this.publish({balance:{status:'ready',data,error:null,refreshing:false}})
+      } catch(error) {
+        if (generation===this.generation && !this.disposed && !controller.signal.aborted && this.state.connected && this.state.account?.role===scope) {
+          const code=safeCode(error)
+          this.publish({balance:{status:code==='BALANCE_UNAVAILABLE' ? 'unavailable' : 'error',data:previous,error:code,refreshing:false}})
+        }
+      }
+      return this.snapshot()
+    })()
+    this.balanceRefreshing=work
+    try { return await work } finally {
+      if (this.balanceRefreshing===work) this.balanceRefreshing=null
+      if (this.balanceController===controller) this.balanceController=null
+    }
+  }
   async refresh(selectDefault = false) {
     this.assertActive()
     if (this.refreshing) return this.refreshing
@@ -127,10 +164,15 @@ export class NovaAccount {
         if (generation !== this.generation || this.disposed) throw new NovaError('CANCELLED')
         const models = await this.onCatalog(catalog, selectDefault)
         if (generation !== this.generation || this.disposed) { await this.onClear(!this.disposed); throw new NovaError('CANCELLED') }
-        return this.publish({ connected: true, hasCredential: true, account, models, error: null })
+        const sameIdentity=this.state.account?.role===account.role
+        if (!sameIdentity) this.resetBalance()
+        this.publish({ connected: true, hasCredential: true, account, models, error: null,...(sameIdentity ? {} : {balance:null}) })
+        // Balance availability must not delay or fail model sign-in/synchronization.
+        void this.refreshBalance().catch(()=>{})
+        return this.snapshot()
       } catch (error) {
         if (generation === this.generation && !this.disposed) {
-          if (safeCode(error) === 'AUTH_REQUIRED') { this.publish({ connected: false, account: null, models: [], error: 'AUTH_REQUIRED' }); try { await this.onClear() } catch { this.publish({warning:'MODEL_CLEANUP_FAILED'}) } }
+          if (safeCode(error) === 'AUTH_REQUIRED') { this.resetBalance(); this.publish({ connected: false, account: null, models: [], balance:null, error: 'AUTH_REQUIRED' }); try { await this.onClear() } catch { this.publish({warning:'MODEL_CLEANUP_FAILED'}) } }
           else this.publish({ error: safeCode(error) })
         }
         throw error
@@ -147,19 +189,21 @@ export class NovaAccount {
       rejected = true
       return {kind:'grant',payload:{...grant, refreshPending:'rejected'}}
     })
-    if (rejected) { this.generation++; await this.onClear(); this.publish({connected:false,account:null,models:[],error:'AUTH_REQUIRED'}) }
+    if (rejected) { this.generation++; this.resetBalance(); this.publish({connected:false,account:null,models:[],balance:null,error:'AUTH_REQUIRED'}); await this.onClear() }
   }
   async revoke(grant) { await this.api.request(PREFIX + '/desktop/auth/revoke', { body: {}, token: grant.refreshToken }) }
   async signout() {
-    this.assertActive(); this.cancel(); this.generation++
-    // Wait for an admitted rotation so revocation uses its latest refresh token.
-    if (this.rotation) await this.rotation.catch(() => {})
-    const grant = storedGrant(await this.credentials.readRecord(RECORD))
-    await this.credentials.deleteRecord(RECORD)
-    this.publish({ connected: false, hasCredential: false, account: null, models: [], attempt: null, error: null, warning: null })
-    try { await this.onClear() } catch { this.publish({ warning: 'MODEL_CLEANUP_FAILED' }) }
-    if (grant) { try { await this.revoke(grant) } catch { this.publish({ warning: this.state.warning ? 'CLEANUP_AND_REVOKE_FAILED' : 'REVOKE_FAILED' }) } }
-    return this.snapshot()
+    this.assertActive(); this.cancel(); this.generation++; this.signingOut=true; this.resetBalance(); this.publish({balance:null})
+    try {
+      // Wait for an admitted rotation so revocation uses its latest refresh token.
+      if (this.rotation) await this.rotation.catch(() => {})
+      const grant = storedGrant(await this.credentials.readRecord(RECORD))
+      await this.credentials.deleteRecord(RECORD)
+      this.publish({ connected: false, hasCredential: false, account: null, models: [], balance:null, attempt: null, error: null, warning: null })
+      try { await this.onClear() } catch { this.publish({ warning: 'MODEL_CLEANUP_FAILED' }) }
+      if (grant) { try { await this.revoke(grant) } catch { this.publish({ warning: this.state.warning ? 'CLEANUP_AND_REVOKE_FAILED' : 'REVOKE_FAILED' }) } }
+      return this.snapshot()
+    } finally { this.signingOut=false }
   }
-  async dispose(waitForWork = true) { this.disposed = true; this.cancel(); this.generation++; this.controller.abort(); if (waitForWork) await Promise.allSettled([this.refreshing, this.rotation]); await this.onClear(false) }
+  async dispose(waitForWork = true) { this.disposed = true; this.cancel(); this.generation++; this.controller.abort(); if (waitForWork) await Promise.allSettled([this.refreshing, this.rotation, this.balanceRefreshing]); await this.onClear(false) }
 }

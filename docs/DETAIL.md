@@ -4,9 +4,13 @@
 
 模型显示原始名称，不追加分组后缀。分组由提供商归属区分。后台同步保留原生模型编辑与删除操作。
 
-插件2.5.0兼容 DSH 0.2.2-rc.2 与 0.2.2-rc.3。Claude系列采用Anthropic Messages，其他文本模型采用OpenAI Responses；识别原始ID及常见vendor前缀，不区分大小写。旧受管配置一次迁移，纯家族原地更新，混合source按家族拆分；原生名称、容量、删除及overrides保留。默认模型自动迁至对应提供商，已有会话引用被拆走模型时需重选。
+插件2.6.0兼容 DSH 0.2.2-rc.2 与 0.2.2-rc.3。Claude系列采用Anthropic Messages，其他文本模型采用OpenAI Responses；识别原始ID及常见vendor前缀，不区分大小写。旧受管配置一次迁移，纯家族原地更新，混合source按家族拆分；原生名称、容量、删除及overrides保留。默认模型自动迁至对应提供商，已有会话引用被拆走模型时需重选。
 
-`migrate_protocols`只迁移旧协议，保留已有图片／思考设置语义，可离线编辑已保存配置，离线不发布缓存桥权限。`configure_models`显式重新启用图片输入和协议原生思考档位；Claude按官方metadata，off为null，未知型号保守关闭思考，不宣称adaptive。迁移完成后普通刷新保留原生编辑。实际后端能力仍以平台为准。平台设备接口暂不提供余额，账户页链接到平台查看。
+`migrate_protocols`只迁移旧协议，保留已有图片／思考设置语义，可离线编辑已保存配置，离线不发布缓存桥权限。`configure_models`显式重新启用图片输入和协议原生思考档位；Claude按官方metadata，off为null，未知型号保守关闭思考，不宣称adaptive。迁移完成后普通刷新保留原生编辑。实际后端能力仍以平台为准。
+
+账户页通过NovaFlow New API既有 `GET /api/novaflow/v1/plugin/usage` 和当前 `nfds_` 设备access显示个人／公司共享钱包。主显可用余额，同时显示总额、冻结与更新时间；CNY金额由服务端换算，客户端直接展示。成员日／月限额另列，null／不限额不当0，额度限制明确提示。无需Cookie、PAT、后台模型Key或后端改造；此路由是平台插件用量接口，标准dashboard billing不接受creator令牌且不适用企业钱包。
+
+登录、账户刷新与默认每10分钟后台刷新后非阻塞读取余额，也可单独“刷新余额”或调用 `refresh_balance`。UI约1.8秒轮询只查询Host状态；读取失败不影响模型登录，保留成功数据并标旧，没有成功数据时不显示假0。退出、拒绝或切换身份清除余额并中止／忽略旧请求。当前AUTH_REQUIRED，真实在线金额待用户重新授权后现场验收。
 
 内置magpie-image MCP，无需在Magpie配置模型。图片默认使用NovaFlow gpt-image-2.6；视频必须由用户明确指定模型，未指定时先列可用模型供选择。长任务返回ID，通过结果工具查询，不自动重复提交。
 

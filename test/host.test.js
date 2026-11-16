@@ -35,9 +35,11 @@ test('Host activates against actual installed libraries; management route is own
   rejected=true;assert.equal((await fetch(request('{"action":"state"}'))).status,403);rejected=false
   interactions='none';assert.equal((await fetch(request('{"action":"state"}'))).status,403);interactions='answer'
   principal={kind:'other'};assert.equal((await fetch(request('{"action":"state"}'))).status,403);principal={kind:'owner'}
-  assert.deepEqual(tools[0].parameters.properties.action.enum,['state','refresh','cancel','signout','configure_models','retry_plugins','migrate_protocols'])
+  assert.deepEqual(tools[0].parameters.properties.action.enum,['state','refresh','cancel','signout','configure_models','retry_plugins','migrate_protocols','refresh_balance'])
   assert.equal((await tools[0].execute({action:'start'})).error.code,'INVALID_REQUEST')
   assert.equal((await tools[0].execute({action:'state'})).value.connected,false)
+  assert.equal((await tools[0].execute({action:'refresh_balance'})).error.code,'AUTH_REQUIRED')
+  assert.equal((await fetch(request('{"action":"refresh_balance"}'))).status,400)
   let status,body
   const res={setHeader:()=>{},writeHead:n=>{status=n},end:value=>{body=value}}
   await webRoutes.find(route=>route.path==='/novaflow/callback').handler({method:'GET',headers:{host:'evil.example'},url:'/novaflow/callback'},res)

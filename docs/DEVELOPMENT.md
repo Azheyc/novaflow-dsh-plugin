@@ -1,6 +1,6 @@
 # NovaFlow 插件开发手册
 
-适用：插件 2.5.0，DSH 0.2.2-rc.2／0.2.2-rc.3，Node.js ≥24。本文描述当前实现，功能入口见[使用说明](../README.md)，测试与分发见[测试与发布](RELEASE.md)。
+适用：插件 2.6.0，DSH 0.2.2-rc.2／0.2.2-rc.3，Node.js ≥24。本文描述当前实现，功能入口见[使用说明](../README.md)，测试与分发见[测试与发布](RELEASE.md)。
 
 ## 1. 项目边界与依据
 
@@ -8,7 +8,7 @@
 
 平台契约依据 NovaFlow 平台内部的《35 创作工作台登录与凭据》专题。该内部文档不随公开仓库分发；接入实现和必要协议摘要见下文，平台契约变更由维护者对照内部文档核对。
 
-平台文档中的旧桌面客户端已归档说明，不代表本独立插件停止维护。平台接口存在也不代表本插件已集成全部接口：例如本插件不取得 `/creator/content/credential` 的共享内容凭据，平台设备接口也没有余额查询。
+平台文档中的旧桌面客户端已归档说明，不代表本独立插件停止维护。平台接口存在也不代表本插件已集成全部接口：例如本插件不取得 `/creator/content/credential` 的共享内容凭据。2.6.0余额采用平台 New API 既有的 `/plugin/usage` 设备接口，无需修改后端；它不是标准 dashboard billing 端点，具体契约见下文。
 
 DSH API 以当前安装的运行时 Inspect 与官方源码为准。需要新接口时先调用 `cordis_inspect_list`，再按返回的 provider、method 和 schema 查询；Inspect 仅提供只读契约，不能把 Inspect 方法当作业务 Service 使用。此次配置表已与实时 `Config.listConfigs` 核对。
 
@@ -77,8 +77,9 @@ Client 使用 `window.__ModuleLoader__.load` 注册动态模块，注入 `slots`
 
 | 动作 | 交互 HTTP | `novaflow_account` 工具 | 作用 |
 |---|---|---|---|
-| `state` | 是 | 是 | 脱敏账户、原生配置摘要、媒体状态、安装状态与分发信息 |
-| `refresh` | 是 | 是 | 刷新会话／目录，不开始安装 |
+| `state` | 是 | 是 | 脱敏账户、余额、原生配置摘要、媒体状态、安装状态与分发信息；只读 Host 当前状态 |
+| `refresh` | 是 | 是 | 刷新会话／目录，随后非阻塞刷新余额，不开始安装 |
+| `refresh_balance` | 是 | 是 | 单独发起平台余额读取，不刷新模型目录或触发安装 |
 | `cancel` | 是，可带 `attemptId` | 是，无 attempt 参数 | 取消当前待授权过程；交互侧用 attempt ID 防止取消错代次 |
 | `signout` | 是 | 是 | 清理本机登录，尝试撤销当前设备 |
 | `configure_models` | 是 | 是 | 显式重新应用家族协议，并重新启用text/image输入和协议原生思考档位 |
@@ -116,6 +117,24 @@ Client 使用 `window.__ModuleLoader__.load` 注册动态模块，注入 `slots`
 首次启用能力保持既有开关语义。`migrate_protocols`仅转换尚未应用策略的旧协议，保留图片开关和已关闭思考；已知Claude保留官方metadata支持的自定义档位有效子集，非Claude也保留有效自定义档位子集，不自动扩展，off的none／null按目标协议转换。该动作标记能力初始化已处理，避免下次联网刷新重置既有input／reasoning。`configure_models`则显式重新启用图片与协议原生档位。两者都不保证上游实际支持所有客户端选项。
 
 离线迁移从已保存原生配置和受管归属构造迁移计划，通过官方ConfigEditor保存，不要求重新授权；离线不会把cached目录权限发布给bridge，配置迁移成功不代表已连接或能发请求。用户改作其他连接后停止管理该连接。退出保留原生配置，清理插件仍拥有的连接凭据，并按归属恢复默认模型。
+
+### New API 余额契约
+
+余额请求为 `GET https://www.ycnovaflow.vip/api/novaflow/v1/plugin/usage`，使用当前 `nfds_` 设备 access token 作为 Bearer；不使用网页登录 Cookie、PAT 或后台模型 Key，不改后端。标准 `/v1/dashboard/billing/subscription` 和 `/v1/dashboard/billing/usage` 不接受 creator 令牌且不适用于企业钱包，不能把本实现称为调用标准 billing 端点。
+
+| 字段 | 语义与展示规则 |
+|---|---|
+| `schema_version` | 当前为 `1`；按契约校验响应 |
+| `account_mode` | `personal` 或 `enterprise`；选择对应钱包并区分个人／公司共享余额 |
+| `personal`／`company` | 对应身份的钱包对象，含 `balance`、`frozen`、`available`；均为 CNY decimal 字符串，服务端已完成换算 |
+| `limits` | `null` 或成员日／月限额、`used`、`remaining`、`canUse`；成员额度不是公司钱包总额，null／不限额不能转成0 |
+| `as_of` | 服务端更新时间；与旧数据提示一起展示，不能用本地轮询时间冒充余额更新时间 |
+
+客户端主显 `available`，同时展示总额和冻结；金额不再除以 `QuotaPerUnit` 或乘汇率。`canUse=false` 提示成员额度限制，不能据此推断公司钱包没有余额。Host `state` 包含余额状态，供界面和 Agent 读取；`refresh_balance` 才发起独立余额请求。
+
+登录成功、账户刷新和默认每10分钟的后台目录刷新后，非阻塞读取余额。界面约1.8秒的轮询仅查询本机 Host 当前状态，不能在轮询中反复调用平台。余额失败不破坏模型登录或目录同步；公开状态与界面保留 error／unavailable，已成功数据保留并明确标旧，无数据不显示假0。退出、授权拒绝、身份切换与卸载时清理相关状态和在途工作，晚到结果须校验身份／代次，不能让旧余额复活。
+
+当前 `AUTH_REQUIRED` 状态不能提供真实在线余额证据。必须由用户重新授权后，对照平台个人／企业钱包现场核验金额与更新时间；隔离测试、Client资源和Slot注册不替代该验收。
 
 ## 6. 安装确认与队列
 

@@ -1,12 +1,12 @@
 # NovaFlow for DeepSeek Harness
 
-版本 **2.5.0**，兼容 DeepSeek Harness **0.2.2-rc.2 和 0.2.2-rc.3**。通过 NovaFlow 浏览器设备授权登录，使用 DSH 官方模型配置管理连接与思考深度，无需复制平台 API Key。
+版本 **2.6.0**，兼容 DeepSeek Harness **0.2.2-rc.2 和 0.2.2-rc.3**。通过 NovaFlow 浏览器设备授权登录，使用 DSH 官方模型配置管理连接与思考深度，无需复制平台 API Key。
 
 ## 获取与安装
 
 源码仓库：[Azheyc/novaflow-dsh-plugin](https://github.com/Azheyc/novaflow-dsh-plugin)。
 
-从 [GitHub Releases](https://github.com/Azheyc/novaflow-dsh-plugin/releases) 下载与当前DSH版本匹配的 `.tgz` 安装包，通过DSH官方插件管理能力安装并启用。Release同时提供 `SHA256SUMS`，用于核对下载文件。2.5.0明确适配DSH **0.2.2-rc.2、0.2.2-rc.3**，不自动放行后续未验证版本；详细步骤见[安装与快速开始](docs/GETTING_STARTED.md)。
+从 [GitHub Releases](https://github.com/Azheyc/novaflow-dsh-plugin/releases) 下载与当前DSH版本匹配的 `.tgz` 安装包，通过DSH官方插件管理能力安装并启用。Release同时提供 `SHA256SUMS`，用于核对下载文件。2.6.0继续适配DSH **0.2.2-rc.2、0.2.2-rc.3**，不自动放行后续未验证版本；详细步骤见[安装与快速开始](docs/GETTING_STARTED.md)。
 
 这是独立插件包，无需替换DSH应用。仓库保留 `private:true`，不通过npm公共仓库发布；GitHub源码仓库和Release安装包公开提供。
 
@@ -27,9 +27,19 @@
 4. 模型名称默认使用原始模型 ID，不追加分组名称。相同模型在不同分组中的路由仍然独立，分组只由提供商归属区分。
 5. 新的首次登录会选择首个可用模型作为新会话默认模型。2.5.0按模型家族拆分提供商时，默认选择会随同一模型转到新提供商；已有会话若引用被拆走的模型，需要在会话中重新选择。
 
-账户页只负责登录与同步，不再维护独立的模型编辑/选择列表。
+账户页负责登录、同步与余额展示，模型编辑和选择使用官方模型页。
 
 后台每10分钟刷新账户授权目录。2.5.0通过已保存的家族协议策略标记，对旧受管连接执行一次家族协议迁移；迁移完成后，普通刷新保留原生模型名称、容量、思考档位及兼容设置，以及用户后续的协议编辑。删除的模型或提供商不会因普通刷新被重新添加。需要重新添加模型时使用官方“获取模型”或手动添加；删除整个提供商后可以重新登录来重新配置。
+
+## 账户余额
+
+2.6.0通过 NovaFlow New API 已有的 `GET /api/novaflow/v1/plugin/usage` 路由读取余额，使用当前 `nfds_` 设备 access token；无需 Cookie、PAT、后台模型 Key 或后端改造。这是平台既有的插件用量接口。标准 `/v1/dashboard/billing/subscription`、`/v1/dashboard/billing/usage` 不接受 creator 令牌，也不适用于企业钱包，因此这里不使用标准 billing 端点。
+
+账户页主显可用余额（`available`），并展示总额（`balance`）、冻结（`frozen`）与更新时间（`as_of`）。个人账户展示个人钱包；企业账户展示公司共享钱包。金额均由服务端换算为 CNY decimal 字符串，客户端直接展示，不再除以 `QuotaPerUnit` 或乘汇率。成员日／月限额、已用和剩余额度另行展示，不当作公司总余额；`null`／不限额不显示成0，`canUse=false` 会提示额度限制。
+
+登录成功、账户刷新和默认每10分钟的后台刷新完成后，插件非阻塞读取余额；也可点击“刷新余额”或调用 `novaflow_account` 的 `refresh_balance` 单独刷新。界面约1.8秒轮询只查询当前 Host 状态，不重复调用平台余额接口。余额失败不影响模型登录：界面明确显示 error／unavailable；已有成功数据保留并标注旧数据，无成功数据时不显示假0。退出、授权拒绝或身份切换会清除余额，并中止或忽略旧请求。
+
+本轮账户仍为 `AUTH_REQUIRED`，尚无真实在线金额验收结果。需用户自行恢复设备授权后，对照平台核验当前钱包、限额和更新时间；不为验收自动登录或退出。执行证据见[验证记录](VERIFICATION.md)。
 
 ## 登录后确认并安装推荐插件
 
@@ -106,7 +116,7 @@
 ## 范围与限制
 
 - 对话模型接入 `kind=text` 的授权目录；图片/视频生成由内置MCP独立提供，使用平台图片/视频endpoint目录。
-- 平台设备接口暂未提供余额查询，账户页链接到平台查看，不显示假定余额。
+- 余额来自平台 New API 的既有 `plugin/usage` 设备接口；真实金额与当前身份以服务端响应为准，读取失败不显示假0，历史缓存明确标旧。
 - 容量、输出上限与能力先采用可确认的内置目录；未知型号采用32768上下文预算、4096默认输出上限、文本输入，可在官方模型页修改。
 - 网页账户入口替换官方账户UI；不修改应用安装文件或原生首次启动欢迎窗口。
 - 当前仅适配指定DSH版本。升级DSH后须核对官方配置和SDK契约。
@@ -129,4 +139,4 @@ ELECTRON_RUN_AS_NODE=1 "$DSH_NODE_EXECUTABLE" --test test/*.test.js
 
 全量检查通过后按[测试与发布](docs/RELEASE.md)打包。构建脚本仅执行语法检查和两组契约测试，不能代替全量测试。测试使用内存凭据、mock上游和临时回环HTTP服务器，不发生付费模型请求；真实官方Config、catalog、adapter与SDK进入思考深度测试。已执行的结果见[验证记录](VERIFICATION.md)。
 
-Agent工具 `novaflow_account` 支持 `state`、`refresh`、`cancel`、`signout`、`configure_models`、`migrate_protocols`、`retry_plugins`。`state`返回不含密钥的账户、原生配置、安装状态及分发摘要；`configure_models`显式重设能力，`migrate_protocols`仅做一次家族协议迁移；`retry_plugins`只请求用户确认。`start`与`confirm_plugins`仅对交互HTTP开放，详见[开发手册](docs/DEVELOPMENT.md#4-本机接口与调用权限)。
+Agent工具 `novaflow_account` 支持 `state`、`refresh`、`refresh_balance`、`cancel`、`signout`、`configure_models`、`migrate_protocols`、`retry_plugins`。`state`返回不含密钥的账户、余额、原生配置、安装状态及分发摘要，不发起平台余额请求；`refresh_balance`单独刷新余额；`configure_models`显式重设能力，`migrate_protocols`仅做一次家族协议迁移；`retry_plugins`只请求用户确认。`start`与`confirm_plugins`仅对交互HTTP开放，详见[开发手册](docs/DEVELOPMENT.md#4-本机接口与调用权限)。

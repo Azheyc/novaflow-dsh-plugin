@@ -28,7 +28,28 @@ window.__ModuleLoader__.load({
     "models": "Model configuration",
     "modelsHelp": "Your connection is saved in Settings → Models. Fetch, add, or edit models in the NovaFlow provider.",
     "balance": "Account balance",
-    "balanceUnknown": "Balance is not provided by this connection. Check your current balance on NovaFlow.",
+    "balanceUnknown": "Balance is currently unavailable. Check your balance on NovaFlow or try refreshing.",
+    "balanceSignin": "Sign in to NovaFlow to view your balance.",
+    "balanceLoading": "Fetching balance…",
+    "balanceRefreshing": "Refreshing balance…",
+    "balanceRefresh": "Refresh balance",
+    "balanceError": "Could not refresh the balance. Please try again.",
+    "balanceStale": "Last updated data — the latest balance could not be confirmed.",
+    "balancePersonal": "Personal balance",
+    "balanceEnterprise": "Enterprise balance",
+    "balanceAvailable": "Available balance",
+    "balanceTotal": "Total balance",
+    "balanceFrozen": "Frozen balance",
+    "balanceCurrency": "CNY",
+    "balanceMissing": "Unavailable",
+    "balanceDailyRemaining": "Remaining today",
+    "balanceMonthlyRemaining": "Remaining this month",
+    "balanceUnlimited": "Unlimited",
+    "balanceUnspecified": "Not set",
+    "balanceBlocked": "Usage is restricted by quota or spending limits, even if an available balance is shown.",
+    "balanceAsOf": "Updated",
+    "balanceDateUnknown": "Update time unavailable",
+    "balanceDateLocale": "en",
     "platform": "Open NovaFlow",
     "signout": "Sign out",
     "signoutConfirm": "Sign out of NovaFlow and clear the local sign-in credentials? Native provider and model configuration will remain for your next sign-in. Running requests may be interrupted.",
@@ -110,7 +131,28 @@ window.__ModuleLoader__.load({
     "models": "模型配置",
     "modelsHelp": "连接已保存到「设置 → 模型」。在 NovaFlow 提供商中获取、新增或编辑模型。",
     "balance": "账户余额",
-    "balanceUnknown": "当前连接接口不提供余额，请前往 NovaFlow 查看实时余额。",
+    "balanceUnknown": "余额暂时不可用，请前往 NovaFlow 查看或尝试刷新。",
+    "balanceSignin": "登录 NovaFlow 后可查看余额。",
+    "balanceLoading": "正在获取余额…",
+    "balanceRefreshing": "正在刷新余额…",
+    "balanceRefresh": "刷新余额",
+    "balanceError": "余额刷新失败，请重试。",
+    "balanceStale": "上次更新数据 — 暂未能确认最新余额。",
+    "balancePersonal": "个人余额",
+    "balanceEnterprise": "企业余额",
+    "balanceAvailable": "可用金额",
+    "balanceTotal": "总余额",
+    "balanceFrozen": "冻结金额",
+    "balanceCurrency": "人民币（CNY）",
+    "balanceMissing": "暂无数据",
+    "balanceDailyRemaining": "今日剩余",
+    "balanceMonthlyRemaining": "本月剩余",
+    "balanceUnlimited": "无限制",
+    "balanceUnspecified": "未设置",
+    "balanceBlocked": "当前受额度或限额限制，即使显示可用余额也暂不可使用。",
+    "balanceAsOf": "更新时间",
+    "balanceDateUnknown": "更新时间暂不可用",
+    "balanceDateLocale": "zh-CN",
     "platform": "打开 NovaFlow",
     "signout": "退出登录",
     "signoutConfirm": "退出 NovaFlow 并清除本机登录凭据？原生提供商和模型配置会保留，重新登录后可继续使用。正在进行的请求可能中断。",
@@ -192,6 +234,10 @@ window.__ModuleLoader__.load({
       .nf-launcher-label {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .nf-notice {padding:10px 12px;border:.5px solid var(--dsw-alias-border-l1);border-radius:8px;overflow-wrap:anywhere}
       .nf-guidance {display:flex;flex-direction:column;gap:8px}
+      .nf-balance-amount {font-size:26px;line-height:36px;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+      .nf-balance-details {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px;margin:0}
+      .nf-balance-details dt {color:var(--dsw-alias-label-secondary)}
+      .nf-balance-details dd {margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
       .nf-install-backdrop {position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:24px;pointer-events:auto;background:color-mix(in srgb,var(--dsw-alias-bg-base) 72%,transparent);backdrop-filter:blur(4px)}
       .nf-install-dialog {width:min(700px,100%);max-height:calc(100dvh - 48px);overflow:auto;padding:24px;border:1px solid var(--dsw-alias-border-l1);border-radius:16px;background:var(--dsw-alias-bg-layer-1);box-sizing:border-box}
       @media(max-width:540px){.nf-install-backdrop{padding:12px}.nf-install-dialog{padding:16px;max-height:calc(100dvh - 24px)}}
@@ -227,7 +273,7 @@ window.__ModuleLoader__.load({
           for (const listener of listeners) listener();
           clearTimeout(pollTimer);
           pollTimer = undefined;
-          if (isPending(snapshot.state) || snapshot.state?.pluginSetup?.running) pollTimer = setTimeout(() => { void readState(); }, 1800);
+          if (isPending(snapshot.state) || snapshot.state?.pluginSetup?.running || snapshot.state?.balance?.refreshing) pollTimer = setTimeout(() => { void readState(); }, 1800);
         }
         async function request(action, attemptId) {
           const controller = new AbortController();
@@ -281,7 +327,14 @@ window.__ModuleLoader__.load({
                 const url = safeAuthorization(state);
                 if (url) window.open(url, '_blank', 'noopener,noreferrer');
               }
-            } catch (error) { publish({ error: error.code || 'NETWORK' }); }
+            } catch (error) {
+              if (action === 'refresh_balance') {
+                publish({ state: { ...snapshot.state, balance: {
+                  status: 'error', data: snapshot.state?.balance?.data || null,
+                  error: error.code || 'NETWORK', refreshing: false,
+                } } });
+              } else publish({ error: error.code || 'NETWORK' });
+            }
           })();
           actionPromise = work;
           try { await work; } finally {
@@ -393,6 +446,57 @@ window.__ModuleLoader__.load({
                 !running && button(t('installConfirmButton'),()=>{void act('confirm_plugins');},!!busy || !state.pluginSetup?.confirmationId,true))
             ));
         }
+        // Keep server decimal strings intact: no floating-point conversion or currency conversion.
+        function balanceMoney(value, t) {
+          return typeof value === 'string' && /^-?\d+(?:\.\d+)?$/.test(value)
+            ? `${value} ${t('balanceCurrency')}` : t('balanceMissing');
+        }
+        function balanceDate(value, t) {
+          if (typeof value !== 'string' || !value) return null;
+          const date = new Date(value);
+          if (!Number.isFinite(date.getTime())) return null;
+          try {
+            return new Intl.DateTimeFormat(t('balanceDateLocale'), { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+          } catch { return null; }
+        }
+        function BalanceCard({ state, loaded, busy, t }) {
+          const balance = state?.balance;
+          // Credentials and balance data are owned by Host. A signed-out view never reuses them.
+          const data = state?.connected ? balance?.data : null;
+          const fetching = !!state?.connected && (balance?.status === 'loading' || balance?.refreshing || busy === 'refresh_balance');
+          const failed = balance?.status === 'error';
+          const stale = !!data && (failed || balance?.status === 'unavailable');
+          const asOf = data ? balanceDate(data.asOf, t) : null;
+          const remaining = (value, mode) => value === null || value === undefined
+            ? t(mode === 'unlimited' ? 'balanceUnlimited' : 'balanceUnspecified') : balanceMoney(value, t);
+          const detail = (key, value) => h('div', {key}, h('dt', null, t(key)), h('dd', null, value));
+          return h('section', {className:'nf-card', 'aria-label':t('balance'), 'aria-busy':fetching},
+            h('h3', null, t('balance')),
+            !loaded ? h('p', {role:'status'}, t('loading'))
+              : !state?.connected ? h('p', {className:'nf-muted'}, t('balanceSignin'))
+              : h(React.Fragment, null,
+                fetching && h('p', {role:'status'}, t(data ? 'balanceRefreshing' : 'balanceLoading')),
+                failed && h('p', {className:'nf-notice',role:'alert'}, t('balanceError')),
+                stale && h('p', {className:'nf-notice',role:'status'}, t('balanceStale')),
+                data ? h(React.Fragment, null,
+                  h('p', {className:'nf-muted'}, t(data.mode === 'enterprise' ? 'balanceEnterprise' : data.mode === 'personal' ? 'balancePersonal' : 'balance')),
+                  h('div', null, h('p', {className:'nf-muted'}, t('balanceAvailable')), h('p', {className:'nf-balance-amount'}, balanceMoney(data.wallet?.available, t))),
+                  h('dl', {className:'nf-balance-details'},
+                    detail('balanceTotal', balanceMoney(data.wallet?.balance, t)),
+                    detail('balanceFrozen', balanceMoney(data.wallet?.frozen, t)),
+                    data.limits && detail('balanceDailyRemaining', remaining(data.limits.dailyRemaining, data.limits.dailyMode)),
+                    data.limits && detail('balanceMonthlyRemaining', remaining(data.limits.monthlyRemaining, data.limits.monthlyMode))
+                  ),
+                  data.limits?.canUse === false && h('p', {className:'nf-notice',role:'alert'}, t('balanceBlocked')),
+                  h('p', {className:'nf-muted'}, asOf ? h(React.Fragment, null, t('balanceAsOf') + ': ', h('time', {dateTime:data.asOf}, asOf)) : t('balanceDateUnknown'))
+                ) : !fetching && !failed && h('p', {className:'nf-muted',role:'status'}, t('balanceUnknown'))
+              ),
+            h('div', {className:'nf-actions'},
+              state?.connected && button(t(fetching ? 'balanceRefreshing' : 'balanceRefresh'), () => { void act('refresh_balance'); }, !!busy || fetching),
+              external(t('platform'))
+            )
+          );
+        }
         function Account({ compact = false } = {}) {
           const { state, loaded, busy, error, t } = useView();
           const [confirmSignout, setConfirmSignout] = React.useState(false);
@@ -435,7 +539,7 @@ window.__ModuleLoader__.load({
             ),
             state?.warning && h('p', { className: 'nf-notice', role: 'status' }, t(({ REVOKE_FAILED: 'revokeFailed', MODEL_CLEANUP_FAILED: 'cleanupFailed', CLEANUP_AND_REVOKE_FAILED: 'cleanupAndRevokeFailed' })[state.warning] || 'warning')),
             !compact && (state?.connected || state?.pluginSetup?.attempted) && h(PluginSetup, {state,busy,t}),
-            !compact && h('div', { className: 'nf-card' }, h('h3', null, t('balance')), h('p', { className: 'nf-muted' }, t('balanceUnknown')), h('div', { className: 'nf-actions' }, external(t('platform')))),
+            !compact && h(BalanceCard, {state,loaded,busy,t}),
             state?.connected && !compact && h('div', { className: 'nf-card' },
               h('h3', null, t('models')),
               h('p', null, t('modelsHelp')),

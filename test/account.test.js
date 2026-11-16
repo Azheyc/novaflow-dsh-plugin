@@ -54,6 +54,7 @@ function harness(t, options = {}) {
     if (path === `${PREFIX}/desktop/auth/revoke`) return { revoked: true }
     if (path === `${PREFIX}/creator/bootstrap`) return bootstrap
     if (path === `${PREFIX}/creator/models`) return { items: [{ group_id: '企业 空间', model_id: 'test-model', supported_endpoint_types: ['openai'] }] }
+    if (path === `${PREFIX}/plugin/usage`) return {schema_version:1,account_mode:'personal',personal:{balance:'10',frozen:'0',available:'10',unit:'CNY'},limits:null,as_of:new Date(NOW).toISOString()}
     throw new Error('Unexpected fake API path')
   } }
   const account = new NovaAccount({ credentials, api, origin: 'http://127.0.0.1:64661', now: () => now,
@@ -80,7 +81,7 @@ function assertPublicState(h) {
   const start = h.calls.findLast(call => call.path.endsWith('/auth/start'))
   const exchange = h.calls.findLast(call => call.path.endsWith('/auth/exchange'))
   for (const secret of [tokenResponse().access_token, tokenResponse().refresh_token, tokenResponse('b').access_token, tokenResponse('b').refresh_token, start?.body.state, exchange?.body.code_verifier].filter(Boolean)) assert.equal(serialized.includes(secret), false)
-  assert.equal(h.account.snapshot().balance, null)
+  assert.ok(h.account.snapshot().balance===null || ['loading','ready','error','unavailable'].includes(h.account.snapshot().balance.status))
 }
 
 test('PKCE sign-in stores a grant only after bootstrap and publishes no credentials', async t => {

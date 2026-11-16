@@ -60,6 +60,7 @@ export async function apply(ctx, rawConfig) {
       return view({...account.snapshot(),configured,nativeProviders:binding.summary()})
     }
     if (action === 'refresh') {const state=await account.refresh();return view(state)}
+    if (action === 'refresh_balance') return view(await account.refreshBalance())
     if (action === 'signout') return view(await account.signout())
     if (action === 'cancel') {
       if (!account.pending && !account.state.connected && account.state.hasCredential && account.state.attempt?.phase === 'exchanging' && input.attemptId === account.state.attempt.id) return view(await account.signout())
@@ -95,8 +96,8 @@ export async function apply(ctx, rawConfig) {
     },
   }))
   ctx.effect(() => ctx.tools.register({
-    name: 'novaflow_account', description: 'Read NovaFlow account/model status, refresh authorized models, cancel a pending login, or sign out. configure_models uses Anthropic Messages for Claude models and OpenAI Responses for other models, with text/image input and protocol-native reasoning levels; mixed providers are split while native names and removals are preserved. migrate_protocols only applies the one-time family protocol migration while preserving existing image and thinking settings; saved managed configuration can be migrated offline without granting bridge permissions. retry_plugins only requests the installation confirmation dialog; it never starts an installation. Only the user can confirm in Account and balance before the official installer uses registry.npmmirror.com. No arbitrary package names, script approvals or version exemptions. Signing in and approving authorization are user-only in Account and balance. Never accepts or returns credentials.',
-    parameters: {type:'object',properties:{action:{type:'string',enum:['state','refresh','cancel','signout','configure_models','retry_plugins','migrate_protocols']}},required:['action'],additionalProperties:false},
+    name: 'novaflow_account', description: 'Read NovaFlow account/model/balance status, refresh authorized models, cancel a pending login, or sign out. refresh_balance reads the current personal or company wallet and member limits from New API using the existing device authorization; amounts are already denominated in CNY. configure_models uses Anthropic Messages for Claude models and OpenAI Responses for other models, with text/image input and protocol-native reasoning levels; mixed providers are split while native names and removals are preserved. migrate_protocols only applies the one-time family protocol migration while preserving existing image and thinking settings; saved managed configuration can be migrated offline without granting bridge permissions. retry_plugins only requests the installation confirmation dialog; it never starts an installation. Only the user can confirm in Account and balance before the official installer uses registry.npmmirror.com. No arbitrary package names, script approvals or version exemptions. Signing in and approving authorization are user-only in Account and balance. Never accepts or returns credentials.',
+    parameters: {type:'object',properties:{action:{type:'string',enum:['state','refresh','cancel','signout','configure_models','retry_plugins','migrate_protocols','refresh_balance']}},required:['action'],additionalProperties:false},
     output: {schema:{type:'object',additionalProperties:true},render:(_args,value)=>[{type:'text',text:JSON.stringify(value)}]},
     execute: async input => { try { return {ok:true,value:await operation(input?.action)} } catch(error) { return {ok:false,error:{code:safeCode(error)}} } },
   }))

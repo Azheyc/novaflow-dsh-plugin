@@ -1,6 +1,6 @@
 # 测试与发布
 
-适用：插件 2.5.0，DSH 0.2.2-rc.2／0.2.2-rc.3。架构与接口见[开发手册](DEVELOPMENT.md)，已执行的历史证据见[验证记录](../VERIFICATION.md)。下文命令均在本插件包根目录运行。
+适用：插件 2.6.0，DSH 0.2.2-rc.2／0.2.2-rc.3。架构与接口见[开发手册](DEVELOPMENT.md)，已执行的历史证据见[验证记录](../VERIFICATION.md)。下文命令均在本插件包根目录运行。
 
 ## 1. 准备开发环境
 
@@ -25,6 +25,7 @@ ELECTRON_RUN_AS_NODE=1 "$DSH_NODE_EXECUTABLE" --test --test-reporter=dot test/*.
 | 改动范围 | 重点用例与检查 |
 |---|---|
 | 账户授权或 API 校验 | [账户测试](../test/account.test.js)、[协议测试](../test/protocol.test.js)、[Host 测试](../test/host.test.js)；取消、过期、跨代次与未知刷新结果 |
+| New API 余额 | 核对 `plugin/usage` 设备 Bearer、schema_version 1、个人／企业钱包、CNY decimal 字符串、成员限额／null不限额／canUse=false；HTTP与Agent的 `refresh_balance`、state只读、非阻塞刷新、失败保旧标旧／不显示假0、退出／拒绝／切换身份的晚到结果保护；Client VM检查钱包文案与状态展示 |
 | 原生模型及桥接 | [原生模型测试](../test/native-models.test.js)、[桥接测试](../test/model-bridge.test.js)；Claude前缀识别／Messages、其他模型Responses、纯家族原地迁移、混合source确定性拆分、名称／容量／删除／overrides与默认选择保留、真实官方序列化、SSE和中止 |
 | 一次策略与离线迁移 | 原生模型与[Host测试](../test/host.test.js)；家族协议策略仅一次、后续原生编辑保留、跨协议compat清理、Claude官方metadata与off:null／未知false、`migrate_protocols`不重置图片／思考、离线不发布cached桥权限、`configure_models`显式重新启用能力 |
 | 媒体工具与文件 | [媒体服务测试](../test/media-service.test.js)、[MCP 测试](../test/media-mcp.test.js)；未知提交结果、恢复、冲突和访问边界 |
@@ -57,7 +58,7 @@ bash build.sh
 
 [构建脚本](../build.sh)依次执行两个入口语法检查、两组契约测试、`npm pack --ignore-scripts`。脚本要求 PATH 中的 node/npm 对应准备好的开发环境；它不自动配置 Electron 运行时、不安装到 profile、不重载当前 GUI。
 
-输出文件名由包名和实际版本决定，例如 `local-novaflow-dsh-plugin-2.5.0.tgz`。分发清单由包清单中的 `files` 控制：源码、补丁、locale、docs、测试、验证记录和构建脚本均被纳入；README 由 npm 自动纳入。根目录的其他说明不应被默认视为已经进入包。
+输出文件名由包名和实际版本决定，例如 `local-novaflow-dsh-plugin-2.6.0.tgz`。分发清单由包清单中的 `files` 控制：源码、补丁、locale、docs、测试、验证记录和构建脚本均被纳入；README 由 npm 自动纳入。根目录的其他说明不应被默认视为已经进入包。
 
 交付前检查打包文件列表和包内版本、Client 内容、双语资源、文档链接。可先使用以下只读预览：
 
@@ -87,7 +88,17 @@ npm pack --ignore-scripts --dry-run --json
 
 每次发布至少记录：插件／DSH／Node 版本、执行的测试和结果、安装应用状态、实际 Client revision／Slot、是否操作真实授权／付费调用、是否做 Windows 实机和视觉检查，以及未解决问题。不得把历史通过数写成本轮重新执行结果。
 
-## 2.5.0本轮核验
+## 2.6.0验证与待验收项
+
+本版新增账户余额展示，使用 NovaFlow New API 已有的 `GET /api/novaflow/v1/plugin/usage`，以 `nfds_` 设备 access 认证；不使用 Cookie、PAT、后台模型 Key，不改后端。该路由是平台插件用量接口，不是标准 `/v1/dashboard/billing/subscription`／`usage`；标准端点不接受 creator 令牌且不适用于企业钱包。
+
+2026-11-16最终完整测试**212项全部通过**（原190项＋Client VM 10项＋Host／parser／生命周期12项）。官方disable／enable两次均 `application=applied`、无warnings。实际state版本2.6.0，账户仍为 `connected=false`、`hasCredential=true`、`error=AUTH_REQUIRED`、`balance=null`；实际 `refresh_balance` 返回 `AUTH_REQUIRED`，未伪造在线金额。
+
+既有GUI提供的真实Client资源revision为 `f92ee7b36197`，GET200、42840bytes，含BalanceCard、“刷新余额”、“今日剩额”和stale组件。未实际截图或点击。完整证据及历史边界见[验证记录](../VERIFICATION.md)。
+
+真实余额验收仍待用户恢复授权：当前账户为 `AUTH_REQUIRED`，不自动登录或退出。授权后分别核对当前身份的钱包总额／冻结／可用金额、CNY单位、`as_of`、企业成员日／月限额与无限额显示，单独刷新按钮及失败标旧；确认界面约1.8秒轮询只读取Host状态，不持续请求平台。余额失败应不影响模型登录。未完成该步骤时不能声称真实在线金额验收通过。
+
+## 2.5.0历史核验
 
 2026-11-16：执行最终完整套件，**190项全部通过**。通过官方disable／enable应用，返回 `application=applied`、无warnings；`migrate_protocols`完成离线迁移，返回版本2.5.0、`capabilitiesReset=false`、1个提供商／7个模型，当前7个本地受管Claude模型均为 `anthropic-messages`，`imageModelCount=7`。实际Client资源revision为 `c51462e91d9b`，GET200、36380bytes，含中英新协议说明。完整实现、测试和现场边界见[验证记录](../VERIFICATION.md)。
 

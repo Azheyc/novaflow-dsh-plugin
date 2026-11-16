@@ -1,5 +1,23 @@
 # NovaFlow 插件验证记录
 
+## 2.6.0：New API余额与现场验收边界
+
+2026-11-16。版本2.6.0，保留DSH `0.2.2-rc.2 || 0.2.2-rc.3`兼容。以下2.5.0及更早验证原文保留；历史余额限制只描述对应版本，不代表2.6.0现状。
+
+本版调用NovaFlow New API既有 `GET /api/novaflow/v1/plugin/usage`，使用 `nfds_` 设备access；不使用Cookie、PAT或后台模型Key，无需改后端。标准 `/v1/dashboard/billing/subscription`／`usage` 不接受creator令牌且不适用于企业钱包，本版采用的是平台插件用量路由，不是标准billing端点。
+
+契约为 `schema_version=1`、`account_mode=personal|enterprise`，对应 `personal`／`company` 对象的 `balance`、`frozen`、`available` 均为CNY decimal字符串，金额已由服务端换算。主显available，另列总额、冻结和 `as_of`；成员日／月限额、used、remaining、canUse独立于公司总余额，null／不限额不当0，canUse=false提示额度限制。
+
+新增HTTP与Agent动作 `refresh_balance`，既有state包含余额且只读Host状态。登录、账户刷新、默认每10分钟后台刷新后非阻塞读余额；按钮可单独刷新，UI约1.8秒轮询不重复调用平台。失败不影响模型登录，error／unavailable明确展示；已成功数据保留并标旧，无数据不显示假0。退出／拒绝／切换身份清余额并中止或忽略旧请求。
+
+最终完整测试**212项全部通过**：原190项，加Client VM 10项和Host／parser／生命周期12项。覆盖钱包与限额解析、金额单位、余额刷新动作、界面状态及旧请求生命周期保护；隔离测试不代表真实平台金额验收。
+
+通过官方disable／enable两次重新应用，两次均返回 `application=applied`、无warnings。实际 `state` 返回版本2.6.0，`connected=false`、`hasCredential=true`、`error=AUTH_REQUIRED`、`balance=null`；实际调用 `refresh_balance` 返回 `AUTH_REQUIRED`，未伪造线上数值，也未为验收自动登录或退出。
+
+在既有GUI `http://127.0.0.1:51785` 读取真实 `clientURL`，revision为 `f92ee7b36197`，GET200、42840bytes，响应含BalanceCard、“刷新余额”、“今日剩额”及stale组件。该证据证明当前GUI提供了新客户端资源，不代表已实际点击、截图或完成主题视觉检查。
+
+**真实金额待验收：**当前账户仍为 `AUTH_REQUIRED`，没有真实在线余额结果。必须用户自行重新授权后，对照当前个人／公司钱包金额、成员限额与更新时间现场核验；不自动登录或退出。隔离测试、资源检查和Slot注册不代表真实在线金额已验收，也不表示付费模型／媒体调用或Windows／主题视觉检查已完成。
+
 ## 2.5.0：家族协议与离线迁移
 
 2026-11-16。保留DSH `0.2.2-rc.2 || 0.2.2-rc.3`兼容，不创建版本豁免。下方2.4.1及更早验证原文保留。
