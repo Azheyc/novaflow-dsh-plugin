@@ -1,6 +1,6 @@
 {
   "name": "@local/novaflow-dsh-plugin",
-  "version": "2.4.1",
+  "version": "2.5.0",
   "description": "NovaFlow account, native models and built-in image/video MCP for DeepSeek Harness",
   "repository": { "type": "git", "url": "https://github.com/Azheyc/novaflow-dsh-plugin.git" },
   "homepage": "https://github.com/Azheyc/novaflow-dsh-plugin#readme",

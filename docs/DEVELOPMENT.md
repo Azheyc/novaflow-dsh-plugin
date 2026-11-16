@@ -1,6 +1,6 @@
 # NovaFlow 插件开发手册
 
-适用：插件 2.4.1，DSH 0.2.2-rc.2／0.2.2-rc.3，Node.js ≥24。本文描述当前实现，功能入口见[使用说明](../README.md)，测试与分发见[测试与发布](RELEASE.md)。
+适用：插件 2.5.0，DSH 0.2.2-rc.2／0.2.2-rc.3，Node.js ≥24。本文描述当前实现，功能入口见[使用说明](../README.md)，测试与分发见[测试与发布](RELEASE.md)。
 
 ## 1. 项目边界与依据
 
@@ -55,7 +55,7 @@ flowchart TD
 | 字段 | 默认值 | 范围与语义 |
 |---|---|---|
 | `autoInstallPlugins` | `true` | 登录／恢复登录后提醒确认。名称保留兼容；不授予无确认安装权限 |
-| `enableAllCapabilities` | `true` | 首次迁移统一 Responses、图片输入和思考档位；迁移后保留原生编辑 |
+| `enableAllCapabilities` | `true` | 首次能力启用沿用图片／思考开关语义，协议按模型家族选择；策略迁移后保留原生编辑。`migrate_protocols`不重置能力，`configure_models`显式重新启用 |
 | `contextWindow` | `32768` | 8192～1048576；缺少已知模型元数据时的上下文预算 |
 | `maxTokens` | `4096` | 1024～131072，并小于上下文预算；初始化时的输出上限参数 |
 | `modelsRefreshInterval` | `600000` | 60000～3600000 毫秒；仅已连接时定时刷新 |
@@ -81,7 +81,8 @@ Client 使用 `window.__ModuleLoader__.load` 注册动态模块，注入 `slots`
 | `refresh` | 是 | 是 | 刷新会话／目录，不开始安装 |
 | `cancel` | 是，可带 `attemptId` | 是，无 attempt 参数 | 取消当前待授权过程；交互侧用 attempt ID 防止取消错代次 |
 | `signout` | 是 | 是 | 清理本机登录，尝试撤销当前设备 |
-| `configure_models` | 是 | 是 | 显式重新应用统一能力设置，会覆盖受管连接当前协议／图片／档位 |
+| `configure_models` | 是 | 是 | 显式重新应用家族协议，并重新启用text/image输入和协议原生思考档位 |
+| `migrate_protocols` | 是 | 是 | 一次迁移旧受管协议，保留已有图片／思考设置语义；可离线编辑已保存受管配置，不发布缓存桥权限 |
 | `retry_plugins` | 是 | 是 | 重新请求用户确认，不开始安装 |
 | `start` | 是 | 否 | 发起浏览器登录 |
 | `confirm_plugins` | 是，必须带当前确认 ID | 否 | 核验交互请求后启动固定安装队列 |
@@ -104,11 +105,17 @@ Client 使用 `window.__ModuleLoader__.load` 注册动态模块，注入 `slots`
 | 安装结果与 request ID | StorageDomain `novaflow_plugin_bootstrap`，version 1；无设备令牌 |
 | 媒体作业元数据 | 默认工作目录的 `.novaflow-media/jobs/`；无平台凭据 |
 
-仅 `kind=text` 的授权目录进入 DSH 模型提供商。名称默认采用原始模型 ID，不加分组后缀；提供商标识来自分组和协议的稳定摘要，不能仅凭显示名判断路由相同。
+仅 `kind=text` 的授权目录进入 DSH 模型提供商。名称默认采用原始模型ID，不加分组后缀；请求继续按授权group路由，不能仅凭显示名判断路由相同。`protocolForModel`不区分大小写地识别原始ID开头及常见vendor前缀后的Claude（支持斜杠、冒号、点等边界）；Claude选择 `anthropic-messages`，其他文本模型选择 `openai-responses`。
+
+历史source提供商标识保留，纯家族source原地更新api和本机URL；混合source按家族拆出确定性child，受管归属记录 `sourceProvider` 与 `familyApi`。原生名称、容量、删除记录和 `modelOverrides` 按家族分配，不重新添加用户删除的模型。默认选择若指向迁移模型则跟随到新提供商；已有会话的显式引用不批量改写，引用被拆走模型的会话需重新选择。
 
 原生模型编辑、发现、思考选择和请求序列化属于官方 `llm-pi-ai`、adapter 与 SDK。插件通过 `ctx.configEditor.edit()` 保存连接，并在桥中附加当前设备访问凭据和 `X-NovaFlow-Group: encodeURIComponent(group_id)`；桥不重写 SDK 生成的模型正文。
 
-统一配置映射为 `input=['text','image']` 与 `off→none`、`low`、`medium`、`high`、`xhigh`、`max`。迁移不保证每个上游支持所有能力。普通目录刷新保留原生编辑和删除；用户改作其他连接后停止管理该连接。退出保留原生配置，清理插件仍拥有的连接凭据，并按归属恢复默认模型。
+受管归属与偏好记录使用 `protocolPolicy='claude-messages-v2'` 标记一次家族迁移。成功后普通刷新保留后续原生协议和能力编辑；跨协议转换清理不适用的compat。Responses显式能力配置为 `input=['text','image']` 与 `off→none`、`low`、`medium`、`high`、`xhigh`、`max`；Claude的reasoning取随附官方metadata，`off→null`，不直接套用Responses的none/xhigh，仅保留官方metadata允许的值（部分Claude支持xhigh），不额外宣称adaptive。未知Claude的 `reasoningEfforts=false`。
+
+首次启用能力保持既有开关语义。`migrate_protocols`仅转换尚未应用策略的旧协议，保留图片开关和已关闭思考；已知Claude保留官方metadata支持的自定义档位有效子集，非Claude也保留有效自定义档位子集，不自动扩展，off的none／null按目标协议转换。该动作标记能力初始化已处理，避免下次联网刷新重置既有input／reasoning。`configure_models`则显式重新启用图片与协议原生档位。两者都不保证上游实际支持所有客户端选项。
+
+离线迁移从已保存原生配置和受管归属构造迁移计划，通过官方ConfigEditor保存，不要求重新授权；离线不会把cached目录权限发布给bridge，配置迁移成功不代表已连接或能发请求。用户改作其他连接后停止管理该连接。退出保留原生配置，清理插件仍拥有的连接凭据，并按归属恢复默认模型。
 
 ## 6. 安装确认与队列
 

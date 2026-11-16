@@ -13,7 +13,7 @@ export const name = 'novaflow-account'
 export const inject = ['credentials', 'connection', 'webServer', 'llm', 'agentDefaultModel', 'tools', 'configEditor', 'mcpManager', 'workingDirectory', 'pluginManager', 'storageDomain']
 export const Config = Schema.object({
   autoInstallPlugins: Schema.boolean().default(true).description('NovaFlow登录后显示推荐插件确认弹窗；只有用户确认后才通过官方安装器和npmmirror开始安装'),
-  enableAllCapabilities: Schema.boolean().default(true).description('首次迁移统一为 OpenAI Responses，并开启图片输入与推理档位；之后保留原生模型编辑'),
+  enableAllCapabilities: Schema.boolean().default(true).description('首次开启图片输入与原生推理档位；Claude采用Anthropic Messages，其他模型采用OpenAI Responses；迁移后保留原生模型编辑'),
   contextWindow: Schema.number().min(8192).max(1048576).default(32768).description('未提供能力元数据时采用的上下文预算；不是平台模型容量声明'),
   maxTokens: Schema.number().min(1024).max(131072).default(4096).description('每次请求的默认输出上限'),
   modelsRefreshInterval: Schema.number().min(60000).max(3600000).default(600000).description('账户与模型目录刷新间隔（毫秒）'),
@@ -54,9 +54,9 @@ export async function apply(ctx, rawConfig) {
     if (action === 'retry_plugins') {
       installFlow.requestConfirmation();return view(account.snapshot())
     }
-    if (action === 'configure_models') {
-      const configured = await binding.configureAllModels()
-      await account.refresh()
+    if (action === 'configure_models' || action === 'migrate_protocols') {
+      const configured = action === 'migrate_protocols' ? await binding.migrateProtocols() : await binding.configureAllModels()
+      if (account.state.connected) await account.refresh()
       return view({...account.snapshot(),configured,nativeProviders:binding.summary()})
     }
     if (action === 'refresh') {const state=await account.refresh();return view(state)}
@@ -95,8 +95,8 @@ export async function apply(ctx, rawConfig) {
     },
   }))
   ctx.effect(() => ctx.tools.register({
-    name: 'novaflow_account', description: 'Read NovaFlow account/model status, refresh authorized models, cancel a pending login, or sign out. configure_models sets all managed native model profiles to OpenAI Responses with text/image input and configurable reasoning levels. retry_plugins only requests the installation confirmation dialog; it never starts an installation. Only the user can confirm in Account and balance before the official installer uses registry.npmmirror.com. No arbitrary package names, script approvals or version exemptions. Signing in and approving authorization are user-only in Account and balance. Never accepts or returns credentials.',
-    parameters: {type:'object',properties:{action:{type:'string',enum:['state','refresh','cancel','signout','configure_models','retry_plugins']}},required:['action'],additionalProperties:false},
+    name: 'novaflow_account', description: 'Read NovaFlow account/model status, refresh authorized models, cancel a pending login, or sign out. configure_models uses Anthropic Messages for Claude models and OpenAI Responses for other models, with text/image input and protocol-native reasoning levels; mixed providers are split while native names and removals are preserved. migrate_protocols only applies the one-time family protocol migration while preserving existing image and thinking settings; saved managed configuration can be migrated offline without granting bridge permissions. retry_plugins only requests the installation confirmation dialog; it never starts an installation. Only the user can confirm in Account and balance before the official installer uses registry.npmmirror.com. No arbitrary package names, script approvals or version exemptions. Signing in and approving authorization are user-only in Account and balance. Never accepts or returns credentials.',
+    parameters: {type:'object',properties:{action:{type:'string',enum:['state','refresh','cancel','signout','configure_models','retry_plugins','migrate_protocols']}},required:['action'],additionalProperties:false},
     output: {schema:{type:'object',additionalProperties:true},render:(_args,value)=>[{type:'text',text:JSON.stringify(value)}]},
     execute: async input => { try { return {ok:true,value:await operation(input?.action)} } catch(error) { return {ok:false,error:{code:safeCode(error)}} } },
   }))

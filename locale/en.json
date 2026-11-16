@@ -47,7 +47,7 @@
     "cleanupFailed": "Sign-in credentials were cleared or have expired, but local connection cleanup did not finish. Native provider and model configuration will remain. Sign in again or restart Harness and retry.",
     "cleanupAndRevokeFailed": "You are signed out locally, but connection cleanup and remote device revocation did not finish. Native provider and model configuration will remain. Restart Harness and revoke this device in NovaFlow Security and access.",
     "modelThinkingHelp": "In each model’s Advanced settings, configure the reasoning levels it supports. Then choose the reasoning depth for the current conversation in its model picker.",
-    "modelConnectionHelp": "Keep the local connection address supplied by the plugin. Manage sign-in, authorization refresh, and sign-out in Account and balance; no API key copying is needed.",
+    "modelConnectionHelp": "Claude models use Anthropic Messages; other models use OpenAI Responses. Keep the local connection address supplied by the plugin. Manage sign-in and refresh in Account and balance; no API key copying is needed.",
     "modelFooterTitle": "NovaFlow connection",
     "modelFooterHelp": "Signing in to NovaFlow saves native provider configuration here. Use the editors above to fetch, add, or edit models. Signing out keeps this configuration, but model requests require you to sign in again.",
     "setupTitle": "Automatic plugin installation",

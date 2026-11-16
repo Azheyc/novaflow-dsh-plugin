@@ -35,7 +35,7 @@ test('Host activates against actual installed libraries; management route is own
   rejected=true;assert.equal((await fetch(request('{"action":"state"}'))).status,403);rejected=false
   interactions='none';assert.equal((await fetch(request('{"action":"state"}'))).status,403);interactions='answer'
   principal={kind:'other'};assert.equal((await fetch(request('{"action":"state"}'))).status,403);principal={kind:'owner'}
-  assert.deepEqual(tools[0].parameters.properties.action.enum,['state','refresh','cancel','signout','configure_models','retry_plugins'])
+  assert.deepEqual(tools[0].parameters.properties.action.enum,['state','refresh','cancel','signout','configure_models','retry_plugins','migrate_protocols'])
   assert.equal((await tools[0].execute({action:'start'})).error.code,'INVALID_REQUEST')
   assert.equal((await tools[0].execute({action:'state'})).value.connected,false)
   let status,body

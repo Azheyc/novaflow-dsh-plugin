@@ -1,5 +1,23 @@
 # NovaFlow 插件验证记录
 
+## 2.5.0：家族协议与离线迁移
+
+2026-11-16。保留DSH `0.2.2-rc.2 || 0.2.2-rc.3`兼容，不创建版本豁免。下方2.4.1及更早验证原文保留。
+
+实现按原始模型ID家族选择协议：Claude使用Anthropic Messages，其他文本模型使用OpenAI Responses；Claude识别支持原始ID开头及常见vendor前缀／斜杠／冒号／点，大小写不敏感。历史source提供商标识保留；纯家族source原地更新协议与本机URL，混合source拆为确定性家族child。原生名称、容量、删除及modelOverrides按家族保留，模型显示原始ID，计费路由继续使用授权group。默认选择跟随同一模型迁至新提供商；已有会话引用被拆走的模型时需重新选择。
+
+`protocolPolicy=claude-messages-v2`标记一次迁移，后续普通刷新保留原生编辑。跨协议清理不适用compat。Claude思考按官方metadata规范：off为null，未知Claude保守false，不额外宣称adaptive；不直接套用Responses的none/xhigh，部分Claude的官方metadata确实支持xhigh。迁移保留已知Claude官方允许的自定义档位子集，也保留非Claude有效自定义档位子集，不自动扩展；off的none／null按目标协议转换。
+
+新增HTTP与Agent动作 `migrate_protocols`仅迁移旧协议，保留已有图片／思考设置语义，并标记能力初始化已处理，避免后续联网刷新重置既有input／reasoning。可离线编辑已保存受管配置；离线绝不发布cached bridge permissions。首次能力启用沿用开关语义；`configure_models`则显式重新启用图片输入及协议原生档位。
+
+最终完整测试，**190项全部通过**（原169项加新增21项）。覆盖家族识别与协议、纯家族迁移／混合拆分、原生设置与删除／overrides保留、默认模型迁移、一次策略及后续编辑、官方metadata和档位有效子集、离线能力保留与桥权限隔离、HTTP／Agent动作等。隔离测试不代表真实平台逐模型能力验收。
+
+通过官方disable／enable重新应用，返回 `application=applied`、无warnings。随后实际调用 `novaflow_account` 的 `migrate_protocols` 成功：版本2.5.0、策略 `claude-messages-v2`、`capabilitiesReset=false`、`providerCount=1`、`modelCount=7`。当前7个本地受管Claude模型均为 `api=anthropic-messages`，`imageModelCount=7`。此结果只验证当前已保存本地模型的离线迁移，不把历史24模型目录当作本轮授权现状。
+
+既有GUI为 `http://127.0.0.1:51785`；读取实际Client资源，revision为 `c51462e91d9b`，GET200、36380bytes，包含中英新协议说明。资源检查证明提供了对应内容，不代替按钮点击、截图或主题视觉验收。
+
+账户仍返回 `connected=false`、`hasCredential=true`、`error=AUTH_REQUIRED`。用户需先退出旧凭据再重新登录，才能重新获取授权目录或发起调用；本轮未自动退出。离线迁移成功不等于账户连接恢复，也不开放缓存权限。媒体MCP旧同名冲突仍在，未声称媒体服务健康。本轮未执行真实付费对话／图片／视频请求、视觉实机或Windows实机验收。
+
 ## 2.4.1：DSH 0.2.2-rc.3 兼容
 
 2026-11-16。当前官方Desktop的DSH为0.2.2-rc.3，自带Node24.21.0。修改前官方库存将2.4.0列为 `incompatible-version`，原因是 `engines.dsh=0.2.2-rc.2`。原167项测试已先在rc.3完整通过，覆盖真实随附Config、catalog、adapter、SDK、MCP客户端及回环HTTP。

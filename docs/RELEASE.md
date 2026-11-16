@@ -1,6 +1,6 @@
 # 测试与发布
 
-适用：插件 2.4.1，DSH 0.2.2-rc.2／0.2.2-rc.3。架构与接口见[开发手册](DEVELOPMENT.md)，已执行的历史证据见[验证记录](../VERIFICATION.md)。下文命令均在本插件包根目录运行。
+适用：插件 2.5.0，DSH 0.2.2-rc.2／0.2.2-rc.3。架构与接口见[开发手册](DEVELOPMENT.md)，已执行的历史证据见[验证记录](../VERIFICATION.md)。下文命令均在本插件包根目录运行。
 
 ## 1. 准备开发环境
 
@@ -25,7 +25,8 @@ ELECTRON_RUN_AS_NODE=1 "$DSH_NODE_EXECUTABLE" --test --test-reporter=dot test/*.
 | 改动范围 | 重点用例与检查 |
 |---|---|
 | 账户授权或 API 校验 | [账户测试](../test/account.test.js)、[协议测试](../test/protocol.test.js)、[Host 测试](../test/host.test.js)；取消、过期、跨代次与未知刷新结果 |
-| 原生模型及桥接 | [原生模型测试](../test/native-models.test.js)、[桥接测试](../test/model-bridge.test.js)；真实官方序列化、用户编辑保留、SSE 和中止 |
+| 原生模型及桥接 | [原生模型测试](../test/native-models.test.js)、[桥接测试](../test/model-bridge.test.js)；Claude前缀识别／Messages、其他模型Responses、纯家族原地迁移、混合source确定性拆分、名称／容量／删除／overrides与默认选择保留、真实官方序列化、SSE和中止 |
+| 一次策略与离线迁移 | 原生模型与[Host测试](../test/host.test.js)；家族协议策略仅一次、后续原生编辑保留、跨协议compat清理、Claude官方metadata与off:null／未知false、`migrate_protocols`不重置图片／思考、离线不发布cached桥权限、`configure_models`显式重新启用能力 |
 | 媒体工具与文件 | [媒体服务测试](../test/media-service.test.js)、[MCP 测试](../test/media-mcp.test.js)；未知提交结果、恢复、冲突和访问边界 |
 | 推荐安装 | [确认门槛测试](../test/plugin-install-flow.test.js)、[安装队列测试](../test/plugin-bootstrap.test.js)、[运行时测试](../test/package-runtime.test.js)、Host 测试 |
 | Client 文案与分发 | [分发契约测试](../test/client-contract.test.js)；双语字典、禁止会话草稿路径、release 常量与真实资源地址 |
@@ -56,7 +57,7 @@ bash build.sh
 
 [构建脚本](../build.sh)依次执行两个入口语法检查、两组契约测试、`npm pack --ignore-scripts`。脚本要求 PATH 中的 node/npm 对应准备好的开发环境；它不自动配置 Electron 运行时、不安装到 profile、不重载当前 GUI。
 
-输出文件名由包名和实际版本决定，例如 `local-novaflow-dsh-plugin-2.4.1.tgz`。分发清单由包清单中的 `files` 控制：源码、补丁、locale、docs、测试、验证记录和构建脚本均被纳入；README 由 npm 自动纳入。根目录的其他说明不应被默认视为已经进入包。
+输出文件名由包名和实际版本决定，例如 `local-novaflow-dsh-plugin-2.5.0.tgz`。分发清单由包清单中的 `files` 控制：源码、补丁、locale、docs、测试、验证记录和构建脚本均被纳入；README 由 npm 自动纳入。根目录的其他说明不应被默认视为已经进入包。
 
 交付前检查打包文件列表和包内版本、Client 内容、双语资源、文档链接。可先使用以下只读预览：
 
@@ -86,6 +87,12 @@ npm pack --ignore-scripts --dry-run --json
 
 每次发布至少记录：插件／DSH／Node 版本、执行的测试和结果、安装应用状态、实际 Client revision／Slot、是否操作真实授权／付费调用、是否做 Windows 实机和视觉检查，以及未解决问题。不得把历史通过数写成本轮重新执行结果。
 
-## 本次文档整理核验
+## 2.5.0本轮核验
+
+2026-11-16：执行最终完整套件，**190项全部通过**。通过官方disable／enable应用，返回 `application=applied`、无warnings；`migrate_protocols`完成离线迁移，返回版本2.5.0、`capabilitiesReset=false`、1个提供商／7个模型，当前7个本地受管Claude模型均为 `anthropic-messages`，`imageModelCount=7`。实际Client资源revision为 `c51462e91d9b`，GET200、36380bytes，含中英新协议说明。完整实现、测试和现场边界见[验证记录](../VERIFICATION.md)。
+
+账户仍为 `connected=false`、`hasCredential=true`、`error=AUTH_REQUIRED`，需用户先退出旧凭据再重新登录，才能重新获取授权目录和调用；本轮未自动退出。媒体MCP旧同名冲突仍在，未执行付费请求或视觉实机验收。离线迁移只证明已保存配置完成转换，不表示账户已连接或缓存权限可请求；已有会话引用被拆走模型时需重新选模型。
+
+## 2.4.0历史文档整理核验
 
 2026-11-13：本次未改运行代码、未安装、未重载、未重打包。主代理重新执行分发契约、Windows 包运行时和安装确认三组测试，**11 项通过，0 失败、0 跳过**。2.4.0 完整套件的167项通过属于此前发布验证，详见验证记录，本次未重复全量执行。另外检查11份新增／更新文档的88处本地链接及章节锚点，全部通过；`npm pack --ignore-scripts --dry-run --json` 确认本包预览39个文件，6份使用／开发文档入口及其包内链接目标均在分发清单中。该预览未生成新tarball。

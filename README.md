@@ -1,12 +1,12 @@
 # NovaFlow for DeepSeek Harness
 
-版本 **2.4.1**，兼容 DeepSeek Harness **0.2.2-rc.2 和 0.2.2-rc.3**。通过 NovaFlow 浏览器设备授权登录，使用 DSH 官方模型配置管理连接与思考深度，无需复制平台 API Key。
+版本 **2.5.0**，兼容 DeepSeek Harness **0.2.2-rc.2 和 0.2.2-rc.3**。通过 NovaFlow 浏览器设备授权登录，使用 DSH 官方模型配置管理连接与思考深度，无需复制平台 API Key。
 
 ## 获取与安装
 
 源码仓库：[Azheyc/novaflow-dsh-plugin](https://github.com/Azheyc/novaflow-dsh-plugin)。
 
-从 [GitHub Releases](https://github.com/Azheyc/novaflow-dsh-plugin/releases) 下载与当前DSH版本匹配的 `.tgz` 安装包，通过DSH官方插件管理能力安装并启用。Release同时提供 `SHA256SUMS`，用于核对下载文件。2.4.1明确适配DSH **0.2.2-rc.2、0.2.2-rc.3**，不自动放行后续未验证版本；详细步骤见[安装与快速开始](docs/GETTING_STARTED.md)。
+从 [GitHub Releases](https://github.com/Azheyc/novaflow-dsh-plugin/releases) 下载与当前DSH版本匹配的 `.tgz` 安装包，通过DSH官方插件管理能力安装并启用。Release同时提供 `SHA256SUMS`，用于核对下载文件。2.5.0明确适配DSH **0.2.2-rc.2、0.2.2-rc.3**，不自动放行后续未验证版本；详细步骤见[安装与快速开始](docs/GETTING_STARTED.md)。
 
 这是独立插件包，无需替换DSH应用。仓库保留 `private:true`，不通过npm公共仓库发布；GitHub源码仓库和Release安装包公开提供。
 
@@ -25,11 +25,11 @@
 2. 插件将授权连接保存到官方 **设置 → 模型** 的提供商配置中。已登录的2.0用户升级后会自动迁移。
 3. 在 **设置 → 模型** 中展开 NovaFlow 提供商，可使用原生的获取模型、添加、编辑、删除和保存流程。
 4. 模型名称默认使用原始模型 ID，不追加分组名称。相同模型在不同分组中的路由仍然独立，分组只由提供商归属区分。
-5. 已有会话显式选择保持原样。新的首次登录会选择首个可用模型作为新会话默认模型。
+5. 新的首次登录会选择首个可用模型作为新会话默认模型。2.5.0按模型家族拆分提供商时，默认选择会随同一模型转到新提供商；已有会话若引用被拆走的模型，需要在会话中重新选择。
 
 账户页只负责登录与同步，不再维护独立的模型编辑/选择列表。
 
-后台每10分钟刷新账户授权目录。已有原生模型名称、容量、思考档位及兼容设置不会被后台覆盖；删除的模型或提供商不会因普通刷新被重新添加。需要重新添加模型时使用官方“获取模型”或手动添加；删除整个提供商后可以重新登录来重新配置。
+后台每10分钟刷新账户授权目录。2.5.0通过已保存的家族协议策略标记，对旧受管连接执行一次家族协议迁移；迁移完成后，普通刷新保留原生模型名称、容量、思考档位及兼容设置，以及用户后续的协议编辑。删除的模型或提供商不会因普通刷新被重新添加。需要重新添加模型时使用官方“获取模型”或手动添加；删除整个提供商后可以重新登录来重新配置。
 
 ## 登录后确认并安装推荐插件
 
@@ -64,11 +64,13 @@
 1. **设置 → 模型 → 对应 NovaFlow 提供商 → 模型编辑 → 高级**：开启思考能力，配置该模型支持的档位和请求值，保存。
 2. 在对话底部的原生模型选择器中选择模型，再选择实际使用的思考深度。
 
-按用户指定的统一配置，本版本首次迁移会将全部受管提供商设为 **OpenAI Responses**，全部模型开启 **text/image** 输入和 **off、low、medium、high、xhigh、max** 档位。关闭档位映射为 Responses 的 `none`。新增连接也继承该偏好；迁移完成后保留用户在原生页面的后续编辑。
+2.5.0按原始模型ID选择协议：**Claude系列使用 Anthropic Messages，其余文本模型使用 OpenAI Responses**。Claude匹配不区分大小写，支持原始ID开头及常见vendor前缀、斜杠、冒号或点分隔形式。历史source提供商标识保留；纯家族提供商原地更新协议和本机URL，混合source按家族拆出确定性child提供商。原生名称、容量、已删除模型和 `modelOverrides` 随家族保留，分组继续按授权group路由。
 
-这里只开启可选择的档位，不强设每次调用的默认深度。用户选择经官方Config、catalog、adapter与SDK生成 `reasoning.effort` 与图片 `input_image`。平台具体模型是否支持图片、Responses以及某个深度，仍以服务端实际能力为准；客户端选项不构成上游能力保证。
+图片能力的首次启用继续遵循原有开关语义；显式 `configure_models` 会重新启用 **text/image** 输入并配置协议原生思考档位。Responses使用 **off、low、medium、high、xhigh、max**，其中off映射为 `none`；Claude采用官方模型metadata支持的档位，off映射为 `null`，不直接套用Responses的 `none/xhigh`，只保留官方metadata允许的值（部分Claude支持xhigh）。未知Claude保守设置 `reasoningEfforts=false`，不宣称支持adaptive。跨协议迁移会清理不适用的compat字段。
 
-通过工具 `novaflow_account` 的 `configure_models` 可按相同规则重新应用所有受管连接；此操作会覆盖其当前协议、图片开关与思考档位，普通目录刷新不会。
+这些配置只提供可选能力，不强设每次调用的默认深度，也不保证平台逐模型支持图片和所有档位。用户选择由官方Config、catalog、adapter与SDK按各自协议序列化。
+
+工具 `novaflow_account` 的 `migrate_protocols` 只迁移尚未应用家族策略的旧受管协议，保留已有图片开关和思考设置的语义；已知Claude保留官方metadata允许的自定义档位子集，其他模型也保留有效自定义档位子集，不自动扩展，off的none／null按目标协议转换。它会标记能力初始化已处理，避免后续联网刷新重置既有input／reasoning；可离线编辑已保存受管配置，离线不会将缓存权限发布给模型桥。`configure_models` 则显式重新应用家族协议、图片开关与思考档位；普通目录刷新不会重复覆盖迁移后的原生编辑。
 
 ## 内置 magpie-image MCP
 
@@ -127,4 +129,4 @@ ELECTRON_RUN_AS_NODE=1 "$DSH_NODE_EXECUTABLE" --test test/*.test.js
 
 全量检查通过后按[测试与发布](docs/RELEASE.md)打包。构建脚本仅执行语法检查和两组契约测试，不能代替全量测试。测试使用内存凭据、mock上游和临时回环HTTP服务器，不发生付费模型请求；真实官方Config、catalog、adapter与SDK进入思考深度测试。已执行的结果见[验证记录](VERIFICATION.md)。
 
-Agent工具 `novaflow_account` 支持 `state`、`refresh`、`cancel`、`signout`、`configure_models`、`retry_plugins`。`state`返回不含密钥的账户、原生配置、安装状态及分发摘要；`configure_models`是显式配置修改；`retry_plugins`只请求用户确认。`start`与`confirm_plugins`仅对交互HTTP开放，详见[开发手册](docs/DEVELOPMENT.md#4-本机接口与调用权限)。
+Agent工具 `novaflow_account` 支持 `state`、`refresh`、`cancel`、`signout`、`configure_models`、`migrate_protocols`、`retry_plugins`。`state`返回不含密钥的账户、原生配置、安装状态及分发摘要；`configure_models`显式重设能力，`migrate_protocols`仅做一次家族协议迁移；`retry_plugins`只请求用户确认。`start`与`confirm_plugins`仅对交互HTTP开放，详见[开发手册](docs/DEVELOPMENT.md#4-本机接口与调用权限)。

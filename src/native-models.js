@@ -58,6 +58,44 @@ const PREFERENCES_RECORD = 'novaflow-account/model-preferences'
 const RESPONSE_EFFORTS = {off:'none',low:'low',medium:'medium',high:'high',xhigh:'xhigh',max:'max'}
 const responseCompat = compat => Object.fromEntries(Object.entries(compat || {}).filter(([key])=>['supportsDeveloperRole','supportsMaxOutputTokens','supportsStrictMode','supportsLongCacheRetention'].includes(key)))
 const responsesModel = model => ({...model,input:['text','image'],reasoningEfforts:{...RESPONSE_EFFORTS},compat:responseCompat(model.compat)})
+export const PROTOCOL_POLICY = 'claude-messages-v2'
+export const protocolForModel = id => /(?:^|[/:.])claude(?:$|[-_.:@/\s])/i.test(id) ? 'anthropic-messages' : 'openai-responses'
+const anthropicCompat = compat => Object.fromEntries(Object.entries(compat || {}).filter(([key])=>['forceAdaptiveThinking','supportsTemperature','supportsLongCacheRetention','supportsEagerToolInputStreaming','supportsCacheControlOnTools','allowEmptySignature','supportsStrictTools'].includes(key)))
+function protocolModel(model, api, config, libraries, allCapabilities) {
+  if (api === 'openai-responses') {
+    const converted = {...model,compat:responseCompat(model.compat)}
+    if (allCapabilities) return responsesModel(converted)
+    if (model.reasoningEfforts) {
+      const allowed=new Set(['none','minimal','low','medium','high','xhigh','max',null])
+      const efforts=Object.fromEntries(Object.entries(model.reasoningEfforts).map(([key,value])=>[key,key==='off' && value===null ? 'none' : value]).filter(([,value])=>allowed.has(value)))
+      converted.reasoningEfforts=Object.keys(efforts).length ? efforts : false
+    }
+    return converted
+  }
+  const seed = modelSeed({id:model.id,api},config,libraries)
+  let efforts=seed.reasoningEfforts
+  if (!allCapabilities && model.reasoningEfforts===false) efforts=false
+  else if (!allCapabilities && model.reasoningEfforts) {
+    const allowed=new Set(Object.values(seed.reasoningEfforts || {}))
+    const filtered=Object.fromEntries(Object.entries(model.reasoningEfforts).map(([key,value])=>[key,key==='off' && value==='none' ? null : value]).filter(([,value])=>allowed.has(value)))
+    efforts=Object.keys(filtered).length ? filtered : false
+  }
+  return {...model,...(allCapabilities ? {input:['text','image']} : {}),reasoningEfforts:efforts,compat:{...anthropicCompat(model.compat),...seed.compat}}
+}
+function familyGroups(items, owners, profiles) {
+  const groups=[]
+  for (const source of new Set(items.map(item=>item.provider))) {
+    const rows=items.filter(item=>item.provider===source), profile=profiles[source], owner=owners.providers[source]
+    const ids=[...rows.map(row=>row.id),...(!owner?.protocolPolicy ? [...(profile?.models || []).map(model=>model.id),...Object.keys(profile?.modelOverrides || {})] : [])]
+    const apis=new Set(ids.map(protocolForModel))
+    const primary=owner?.familyApi || (apis.size===1 ? [...apis][0] : rows[0].api==='anthropic-messages' ? 'anthropic-messages' : 'openai-responses')
+    for (const api of apis) {
+      const provider=api===primary ? source : 'novaflow-'+createHash('sha256').update(JSON.stringify([source,api])).digest('hex').slice(0,20)
+      groups.push({source,provider,api,group:rows[0].group,rows:rows.filter(row=>protocolForModel(row.id)===api).map(row=>({...row,provider,api}))})
+    }
+  }
+  return groups
+}
 const DEFAULT_RECORD = 'novaflow-account/default-model'
 export const bridgeRef = provider => provider.toUpperCase().replaceAll('-', '_') + '_API_KEY'
 const levels = ['off','minimal','low','medium','high','xhigh','max']
@@ -79,7 +117,8 @@ export function nativeEfforts(base) {
 }
 export function modelSeed(item, config, libraries) {
   const providers = item.api === 'anthropic-messages' ? ['anthropic'] : item.api === 'openai-responses' ? ['openai'] : ['openai','deepseek','google']
-  let base = providers.map(p => libraries.getBuiltinModel?.(p,item.id)).find(model => model?.api === item.api)
+  const metadataId=item.api==='anthropic-messages' && protocolForModel(item.id)==='anthropic-messages' ? item.id.slice(item.id.toLowerCase().lastIndexOf('claude')).toLowerCase() : item.id
+  let base = providers.map(p => libraries.getBuiltinModel?.(p,metadataId)).find(model => model?.api === item.api)
   // OpenAI publishes recent GPT capabilities on its Responses route, while gateways
   // may expose the same exact model through Chat Completions. Its effort vocabulary
   // is shared by those two OpenAI serializers; preserve the exact model's levels.
@@ -113,52 +152,78 @@ export async function createModelBinding(ctx, account, config, libraries) {
   async function releaseKey(provider, owner) {
     const profile = entry().options.config?.providers?.[provider]
     const ref = owner.ref || bridgeRef(provider)
-    if (profile && (profile.apiKeyEnv !== ref || profile.api !== owner.api || !managedURL(profile.baseURL,provider,owner.api))) return
+    if (profile && (profile.apiKeyEnv !== ref || ![owner.api,owner.pendingApi].includes(profile.api) || !managedURL(profile.baseURL,provider,profile.api))) return
     const key = (await ctx.credentials.resolve(ref))?.value
     if (key && owner.keyDigest && digest(key) === owner.keyDigest) await ctx.credentials.unset(ref)
   }
-  async function update(catalog, selectDefault) {
+  let lastCatalog, lastConfigured
+  async function update(catalog, selectDefault, {force=false,ownedItems,protocolsOnly=false}={}) {
     const generation = revision
-    const items = parseCatalog(catalog), owners = await ownership(), changes = [], routes = []
+    const sourceItems = ownedItems || parseCatalog(catalog), owners = await ownership(), changes = [], routes = []
+    if (!ownedItems) lastCatalog = structuredClone(catalog)
     const savedPreferences = await ctx.credentials.readRecord(PREFERENCES_RECORD)
     const preferences = savedPreferences?.kind === 'grant' ? savedPreferences.payload : null
-    const setupPending = config.enableAllCapabilities === true && !preferences?.allCapabilities
-    const liveEntry = entry()
-    const current = liveEntry.options.config?.providers || {}
-    for (const provider of new Set(items.map(item => item.provider))) {
-      const rows = items.filter(item => item.provider === provider), item = rows[0]
-      const ref = bridgeRef(provider)
-      const prior = owners.providers[provider]
-      const existing = current[provider]
-      const api = setupPending ? 'openai-responses' : existing?.api || preferences?.api || item.api
-      if (!['openai-completions','openai-responses','anthropic-messages'].includes(api)) continue
-      const baseURL = origin + '/novaflow/models/' + provider + (api === 'anthropic-messages' ? '' : '/v1')
+    const setupPending = !protocolsOnly && config.enableAllCapabilities === true && !preferences?.allCapabilities && !preferences?.capabilitiesInitialized
+    const allCapabilities = force || setupPending || preferences?.allCapabilities === true
+    const liveEntry = entry(), current = liveEntry.options.config?.providers || {}
+    const groups = familyGroups(sourceItems,owners,current)
+    const guarded = new Map()
+    // Resolve ownership once before constructing split profiles. A changed source
+    // connection/key must never be copied into a new managed child provider.
+    for (const source of new Set(groups.map(group=>group.source))) {
+      const prior=owners.providers[source], profile=current[source], ref=bridgeRef(source)
+      if (!prior && profile) throw new NovaError('MODEL_CONFIG_CONFLICT')
+      const key=(await ctx.credentials.resolve(ref))?.value
+      guarded.set(source,!(profile && (profile.apiKeyEnv!==ref || !managedURL(profile.baseURL,source,profile.api))) && !(key && (!prior?.keyDigest || digest(key)!==prior.keyDigest || !key.startsWith('nfb_'))))
+    }
+    for (const group of groups) {
+      const {provider,source,rows,group:groupId}=group
+      const ref=bridgeRef(provider), prior=owners.providers[provider], existing=current[provider]
       if (!prior && existing) throw new NovaError('MODEL_CONFIG_CONFLICT')
-      // Once a native provider is deleted, background synchronization leaves it deleted.
-      // A fresh user sign-in explicitly provisions it again.
       if (prior?.provisioned && !existing && !selectDefault) continue
-      if (existing && prior && (existing.apiKeyEnv !== ref || !managedURL(existing.baseURL,provider,api))) {
-        continue // The user has repurposed this profile. Never overwrite it or its key.
+      const inherit=provider!==source && !existing && !prior?.provisioned
+      if ((!existing || provider===source) && !guarded.get(source)) continue
+      if (inherit && owners.providers[source]?.provisioned && !current[source] && !selectDefault) continue
+      if (existing && (existing.apiKeyEnv!==ref || !managedURL(existing.baseURL,provider,existing.api))) continue
+      let key=(await ctx.credentials.resolve(ref))?.value
+      if (key && (!prior?.keyDigest || digest(key)!==prior.keyDigest || !key.startsWith('nfb_'))) {
+        if (provider!==source && !existing) throw new NovaError('MODEL_CONFIG_CONFLICT')
+        continue
       }
-      let key = (await ctx.credentials.resolve(ref))?.value
-      if (key && prior?.keyDigest && digest(key) !== prior.keyDigest) continue
-      if (key && !key.startsWith('nfb_')) continue
-      if (!key) key = 'nfb_' + randomBytes(32).toString('base64url')
-      const models = existing?.models ? existing.models.map(model => setupPending ? responsesModel(model) : model) : rows.map(row => {
-        const seed = modelSeed({...row,api},config,libraries)
-        return setupPending || preferences?.allCapabilities ? responsesModel(seed) : seed
+      if (!key) key='nfb_'+randomBytes(32).toString('base64url')
+      const template=existing || (inherit ? current[source] : undefined)
+      const migrate=force || prior?.protocolPolicy!==PROTOCOL_POLICY
+      const api=migrate ? group.api : existing?.api || group.api
+      if (!['openai-completions','openai-responses','anthropic-messages'].includes(api)) continue
+      const convert=migrate || force || setupPending || !template || template.api!==api
+      const enhanceCapabilities=force || setupPending || (!template && (allCapabilities || config.enableAllCapabilities===true))
+      const partition=inherit || prior?.protocolPolicy!==PROTOCOL_POLICY
+      const selectModel=model=>!partition || protocolForModel(model.id)===group.api
+      const models=template?.models ? template.models.filter(selectModel).map(model=>convert ? protocolModel(model,api,config,libraries,enhanceCapabilities) : model) : rows.map(row=>{
+        const seed=modelSeed({...row,api},config,libraries)
+        return protocolModel(seed,api,config,libraries,enhanceCapabilities)
       })
-      let next = existing ? {...existing,api,baseURL,models,...(setupPending ? {compat:responseCompat(existing.compat)} : {}),...(setupPending && existing.modelOverrides ? {modelOverrides:Object.fromEntries(Object.entries(existing.modelOverrides).map(([id,value])=>[id,responsesModel(value)]))} : {})} : {displayName:'NovaFlow · ' + item.group,api,baseURL,apiKeyEnv:ref,models,defaultContextWindow:config.contextWindow,defaultMaxTokens:config.maxTokens,transport:'sse'}
-      // One-time migration of 2.0 platform-generated labels; user names thereafter remain theirs.
-      if (existing && !prior?.namesNormalized) next = {...next,models:models.map(model => {
-        const generated = rows.find(row => row.id === model.id)
-        return generated && (model.name === model.id + '（' + item.group + '）' || model.name === model.id + ' (' + item.group + ')') ? {...model,name:model.id} : model
+      const baseURL=origin+'/novaflow/models/'+provider+(api==='anthropic-messages'?'':'/v1')
+      let next=template ? {...template,api,baseURL,apiKeyEnv:ref,models} : {displayName:'NovaFlow · '+groupId,api,baseURL,apiKeyEnv:ref,models,defaultContextWindow:config.contextWindow,defaultMaxTokens:config.maxTokens,transport:'sse'}
+      if (template?.modelOverrides) {
+        next.modelOverrides=Object.fromEntries(Object.entries(template.modelOverrides).filter(([id])=>selectModel({id})).map(([id,value])=>{
+          const converted=convert ? protocolModel({...value,id},api,config,libraries,enhanceCapabilities) : {...value}
+          // Overrides are partial. Absent fields must keep inheriting the model.
+          if (!enhanceCapabilities && !Object.hasOwn(value,'reasoningEfforts')) delete converted.reasoningEfforts
+          if (!Object.hasOwn(value,'compat')) delete converted.compat
+          delete converted.id
+          return [id,converted]
+        }))
+      }
+      if (convert && template) next.compat=api==='anthropic-messages' ? anthropicCompat(template.compat) : responseCompat(template.compat)
+      if (template && !prior?.namesNormalized) next={...next,models:models.map(model=>{
+        const generated=rows.find(row=>row.id===model.id)
+        return generated && (model.name===model.id+'（'+groupId+'）' || model.name===model.id+' ('+groupId+')') ? {...model,name:model.id} : model
       })}
       if (!isDeepStrictEqual(existing,next)) changes.push({provider,next,expected:existing})
-      owners.providers[provider] = {group:item.group,api,ref,namesNormalized:true,provisioned:!!existing,keyDigest:digest(key)}
-      // The bridge catalog is the platform permission catalog, independent of the user's
-      // native model selection. Get models can therefore add removed models again.
-      routes.push({provider,api,group:item.group,key,models:rows.map(row => modelSeed({...row,api},config,libraries))})
+      owners.providers[provider]={...prior,group:groupId,api:existing?.api || api,pendingApi:api,ref,namesNormalized:true,provisioned:!!existing,keyDigest:digest(key),sourceProvider:source,familyApi:group.api}
+      // Discovery also follows family routing, while removed native models stay removed.
+      routes.push({provider,api,group:groupId,key,models:rows.map(row=>protocolModel(modelSeed({...row,api},config,libraries),api,config,libraries,allCapabilities))})
     }
     if (generation !== revision) throw new NovaError('CANCELLED')
     await saveOwnership(owners)
@@ -167,64 +232,83 @@ export async function createModelBinding(ctx, account, config, libraries) {
       await ctx.credentials.set(bridgeRef(route.provider),route.key)
       if (generation !== revision) { await ctx.credentials.unset(bridgeRef(route.provider)); throw new NovaError('CANCELLED') }
     }
-    if (changes.length) try { await ctx.configEditor.edit(liveEntry, latest => {
+    if (changes.length) try { await ctx.configEditor.edit(liveEntry, latest=>{
       if (generation !== revision) throw new NovaError('CANCELLED')
-      const providers = {...latest.providers}
+      const providers={...latest.providers}
+      // Split profiles were derived from this exact source configuration.
+      for (const group of groups) if (changes.some(change=>change.provider===group.provider) && !isDeepStrictEqual(providers[group.source],current[group.source])) throw new NovaError('MODEL_CONFIG_CONFLICT')
       for (const change of changes) {
         if (!isDeepStrictEqual(providers[change.provider],change.expected)) throw new NovaError('MODEL_CONFIG_CONFLICT')
-        providers[change.provider] = change.next
+        providers[change.provider]=change.next
       }
       return {...latest,providers}
-    }) } catch (error) { console.error('[novaflow-account] native model settings write failed'); throw new NovaError('MODEL_SETTINGS_WRITE_FAILED') }
+    }) } catch { console.error('[novaflow-account] native model settings write failed'); throw new NovaError('MODEL_SETTINGS_WRITE_FAILED') }
     if (generation !== revision) throw new NovaError('CANCELLED')
-    for (const route of routes) owners.providers[route.provider].provisioned = true
+    for (const route of routes) {
+      Object.assign(owners.providers[route.provider],{api:route.api,provisioned:true,protocolPolicy:PROTOCOL_POLICY})
+      delete owners.providers[route.provider].pendingApi
+    }
     await saveOwnership(owners)
-    if (setupPending) await ctx.credentials.modifyRecord(PREFERENCES_RECORD,async()=>({kind:'grant',payload:{api:'openai-responses',allCapabilities:true}}))
+    await ctx.credentials.modifyRecord(PREFERENCES_RECORD,async()=>({kind:'grant',payload:{protocolPolicy:PROTOCOL_POLICY,allCapabilities:!!allCapabilities,capabilitiesInitialized:!!(force || setupPending || protocolsOnly || preferences?.capabilitiesInitialized)}}))
     if (generation !== revision) throw new NovaError('CANCELLED')
-    const facts = JSON.stringify(routes)
-    if (facts !== bridgeFacts) { bridge.setRoutes(routes); bridgeFacts = facts }
-    for (const provider of liveProviders) if (!routes.some(route => route.provider === provider) && owners.providers[provider]) await releaseKey(provider,owners.providers[provider])
-    liveProviders = new Set(routes.map(route => route.provider))
-    for (const provider of liveProviders) ctx.emit('llm/models-updated',provider)
-    const nativeProfiles = entry().options.config?.providers || {}
-    const selectedItems = items.filter(item => liveProviders.has(item.provider) && nativeProfiles[item.provider]?.models?.some(model => model.id === item.id))
-    if (selectDefault && selectedItems.length) {
-      const currentDefault = ctx.agentDefaultModel.currentSelection()
-      if (!selectedItems.some(item => item.provider === currentDefault.provider && item.id === currentDefault.model)) {
-        const selected = {provider:selectedItems[0].provider,model:selectedItems[0].id}
-        await ctx.credentials.modifyRecord(DEFAULT_RECORD,async record => ({kind:'grant',payload:{previous:record?.kind === 'grant' && record.payload?.previous ? record.payload.previous : currentDefault,selected}}))
-        await ctx.agentDefaultModel.saveSelection(selected)
-      }
+    const plannedProviders=new Set(routes.map(route=>route.provider))
+    if (!ownedItems) {
+      const facts=JSON.stringify(routes)
+      if (facts!==bridgeFacts) { bridge.setRoutes(routes);bridgeFacts=facts }
+      for (const provider of liveProviders) if (!plannedProviders.has(provider) && owners.providers[provider]) await releaseKey(provider,owners.providers[provider])
+      liveProviders=plannedProviders
+    }
+    for (const provider of plannedProviders) ctx.emit('llm/models-updated',provider)
+    const nativeProfiles=entry().options.config?.providers || {}
+    lastConfigured={providers:[...plannedProviders].map(provider=>({provider,api:nativeProfiles[provider]?.api,modelIds:(nativeProfiles[provider]?.models || []).map(model=>model.id)}))}
+    const selectedItems=groups.flatMap(group=>group.rows).filter(item=>plannedProviders.has(item.provider) && nativeProfiles[item.provider]?.models?.some(model=>model.id===item.id))
+    let currentDefault=ctx.agentDefaultModel.currentSelection()
+    const moved=groups.find(group=>group.source===currentDefault.provider && group.provider!==group.source && plannedProviders.has(group.provider) && nativeProfiles[group.provider]?.models?.some(model=>model.id===currentDefault.model))
+    if (moved && !nativeProfiles[currentDefault.provider]?.models?.some(model=>model.id===currentDefault.model)) {
+      currentDefault={...currentDefault,provider:moved.provider}
+      await ctx.agentDefaultModel.saveSelection(currentDefault)
+      await ctx.credentials.modifyRecord(DEFAULT_RECORD,async record=>record?.kind==='grant' && record.payload?.selected ? {...record,payload:{...record.payload,selected:currentDefault}} : undefined)
+    }
+    if (selectDefault && selectedItems.length && !selectedItems.some(item=>item.provider===currentDefault.provider && item.id===currentDefault.model)) {
+      const selected={provider:selectedItems[0].provider,model:selectedItems[0].id}
+      await ctx.credentials.modifyRecord(DEFAULT_RECORD,async record=>({kind:'grant',payload:{previous:record?.kind==='grant' && record.payload?.previous ? record.payload.previous : currentDefault,selected}}))
+      await ctx.agentDefaultModel.saveSelection(selected)
     }
     return selectedItems.map(({api,...item})=>item)
   }
-  async function configureAllModels() {
-    const generation = revision
-    const owners = await ownership(), liveEntry = entry()
-    const enhance = model => responsesModel({...model,name:model.id || model.name})
-    let providerCount=0,modelCount=0
-    await ctx.configEditor.edit(liveEntry, latest => {
-      if (generation !== revision) throw new NovaError('CANCELLED')
-      const providers={...latest.providers}
-      for (const [provider, owner] of Object.entries(owners.providers)) {
-        const profile=providers[provider]
-        if (!profile || profile.apiKeyEnv !== owner.ref || !managedURL(profile.baseURL,provider,profile.api)) continue
-        const models=(profile.models || []).map(enhance)
-        const modelOverrides=Object.fromEntries(Object.entries(profile.modelOverrides || {}).map(([id,value])=>[id,enhance({...value,id})]))
-        for(const value of Object.values(modelOverrides)) delete value.id
-        providers[provider]={...profile,compat:responseCompat(profile.compat),api:'openai-responses',baseURL:origin+'/novaflow/models/'+provider+'/v1',models,...(Object.keys(modelOverrides).length ? {modelOverrides} : {})}
-        owners.providers[provider]={...owner,api:'openai-responses'}
-        providerCount++;modelCount+=models.length
+  async function updateSafely(...args) {
+    try { return await update(...args) } catch(error) {
+      bridge.clear();bridgeFacts=''
+      // A failed split must not leave a new, unused child credential behind.
+      const owners=await ownership().catch(()=>null)
+      for(const [provider,facts] of Object.entries(owners?.providers || {})) {
+        if(!facts.provisioned && !entry().options.config?.providers?.[provider]) await releaseKey(provider,facts).catch(()=>{})
       }
-      return {...latest,providers}
-    })
-    if(generation !== revision) throw new NovaError('CANCELLED')
-    await saveOwnership(owners)
-    await ctx.credentials.modifyRecord(PREFERENCES_RECORD,async()=>({kind:'grant',payload:{api:'openai-responses',allCapabilities:true}}))
-    return {providerCount,modelCount,api:'openai-responses',input:['text','image'],reasoningEfforts:Object.keys(RESPONSE_EFFORTS)}
+      throw error
+    }
+  }
+  async function configureAllModels(force=true) {
+    if (lastCatalog) await updateSafely(lastCatalog,false,{force,protocolsOnly:!force})
+    else {
+      const owners=await ownership(),profiles=entry().options.config?.providers || {},items=[],seen=new Set()
+      for (const [provider,owner] of Object.entries(owners.providers)) {
+        const profile=profiles[provider]
+        if (!profile) continue
+        const source=owner.sourceProvider || provider
+        for (const id of [...(profile.models || []).map(model=>model.id),...Object.keys(profile.modelOverrides || {})]) {
+          const key=JSON.stringify([source,id])
+          if (!seen.has(key)) {seen.add(key);items.push({provider:source,id,name:id,group:owner.group,api:profile.api})}
+        }
+      }
+      // Saved configuration can be edited without a device grant. These rows are
+      // never installed as bridge permissions; only a fresh platform catalog may do so.
+      await updateSafely({items:[]},false,{force,ownedItems:items,protocolsOnly:!force})
+    }
+    const providers=lastConfigured?.providers || []
+    return {providerCount:providers.length,modelCount:providers.reduce((count,profile)=>count+profile.modelIds.length,0),protocolPolicy:PROTOCOL_POLICY,apis:['anthropic-messages','openai-responses'],capabilitiesReset:force,...(force ? {input:['text','image']} : {}),providers}
   }
   async function clear(restore = true) {
-    bridge.clear(); bridgeFacts=''
+    bridge.clear(); bridgeFacts=''; lastCatalog=undefined; lastConfigured=undefined
     const owners = await ownership()
     for (const [provider, facts] of Object.entries(owners.providers)) {
       // The private ref is owned by this bridge, while model configuration remains
@@ -243,8 +327,8 @@ export async function createModelBinding(ctx, account, config, libraries) {
   }
   let mutations = Promise.resolve()
   const serialize = operation => { const result=mutations.then(operation);mutations=result.catch(()=>{});return result }
-  return {configureAllModels:()=>serialize(configureAllModels),summary: () => {
+  return {configureAllModels:()=>serialize(configureAllModels),migrateProtocols:()=>serialize(()=>configureAllModels(false)),summary: () => {
     const providers = entry().options.config?.providers || {}
-    return [...liveProviders].map(provider => ({provider,api:providers[provider]?.api,modelCount:providers[provider]?.models?.length || 0,imageModelCount:(providers[provider]?.models || []).filter(model=>model.input?.includes('image')).length,reasoningModels:(providers[provider]?.models || []).filter(model => model.reasoningEfforts && model.reasoningEfforts !== false).map(model=>({id:model.id,efforts:Object.keys(model.reasoningEfforts)}))}))
-  },update:(...args)=>serialize(async()=>{try{return await update(...args)}catch(error){bridge.clear();bridgeFacts='';throw error}}),clear:(restore=true)=>{revision++;bridge.clear();return restore ? serialize(()=>clear(true)) : clear(false)},bridge}
+    return [...new Set([...liveProviders,...(lastConfigured?.providers || []).map(profile=>profile.provider)])].filter(provider=>providers[provider]).map(provider => ({provider,api:providers[provider].api || null,modelCount:providers[provider]?.models?.length || 0,imageModelCount:(providers[provider]?.models || []).filter(model=>model.input?.includes('image')).length,reasoningModels:(providers[provider]?.models || []).filter(model => model.reasoningEfforts && model.reasoningEfforts !== false).map(model=>({id:model.id,efforts:Object.keys(model.reasoningEfforts)}))}))
+  },update:(...args)=>serialize(()=>updateSafely(...args)),clear:(restore=true)=>{revision++;bridge.clear();return restore ? serialize(()=>clear(true)) : clear(false)},bridge}
 }

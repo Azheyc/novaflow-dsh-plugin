@@ -1,6 +1,6 @@
 # 故障排查
 
-适用：插件 2.4.1，DSH 0.2.2-rc.2／0.2.2-rc.3。先记录插件版本、DSH 版本、操作系统、错误码和脱敏状态；定位源码见[开发手册](DEVELOPMENT.md)，实际分发核验见[测试与发布](RELEASE.md)。
+适用：插件 2.5.0，DSH 0.2.2-rc.2／0.2.2-rc.3。先记录插件版本、DSH 版本、操作系统、错误码和脱敏状态；定位源码见[开发手册](DEVELOPMENT.md)，实际分发核验见[测试与发布](RELEASE.md)。
 
 ## 优先检查的状态
 
@@ -42,8 +42,13 @@
 | `RUNTIME_UNSUPPORTED` | 核对当前 DSH 版本及随附官方库。Host 不一定有工具环境的 `DSH_INSTALL_DIR`；检查 resources／入口解析，不借用另一个全局 DSH |
 | `MODEL_SETTINGS_UNAVAILABLE` | 核对官方 `llm-pi-ai` entry 是否存在；不要绕过官方配置另建不可编辑的运行时模型列表 |
 | `MODEL_SETTINGS_WRITE_FAILED` | 检查 ConfigEditor／HMR 和官方配置错误，保留登录与原生配置，修复后刷新重试 |
-| 思考档位或图片输入不可用 | 查看原生高级设置、实际 adapter／SDK 序列化及上游支持。统一开关不是服务端能力保证 |
-| 想重新应用统一设置 | `configure_models` 会覆盖受管连接的协议、图片和档位；它是显式修改，普通刷新不会执行相同覆盖 |
+| 思考档位或图片输入不可用 | 查看原生高级设置、实际adapter／SDK序列化及上游支持。Claude用官方metadata，off为null；不直接套用Responses的none/xhigh，仅按官方metadata允许值规范（部分Claude支持xhigh），未知Claude思考为false，不假定adaptive。客户端选项不是服务端能力保证 |
+| 想重新启用图片和思考档位 | `configure_models`显式重设家族协议，并重新启用text/image和协议原生档位；普通刷新不会执行相同覆盖 |
+| 只想修正旧统一Responses协议 | 使用HTTP或Agent动作 `migrate_protocols`，仅一次家族迁移，保留已有图片／思考设置语义；跨协议值按目标协议转换，清理不适用compat |
+| 未登录或AUTH_REQUIRED时需要迁移 | 2.5.0可离线编辑已保存受管配置，无需为迁移重新授权；离线不发布cached桥权限，成功只证明配置已保存，不能证明账户或模型请求可用 |
+| Claude仍显示Responses或名称带vendor前缀 | 先核对实际delivery为2.5.0与迁移策略。Claude识别不区分大小写，支持原始ID开头及常见vendor前缀／冒号／点；已应用策略后的手工协议编辑会保留，需重设时显式configure_models |
+| 升级后出现家族child提供商 | 混合source按家族确定性拆分，纯家族保留source原地更新。核对名称、容量、删除和overrides按家族保留，不按显示名合并路由 |
+| 旧会话模型找不到，默认模型却正常 | 默认同模型会迁至新提供商；已有会话若引用被拆走模型，需在该会话重新选择 |
 | 手动删除后未被目录同步加回 | 这是保留用户删除的行为。使用官方获取模型／手动添加；删除提供商后可重新登录配置 |
 | 模型同名但分组不同 | 通过提供商和授权 group 区分，不能合并计费路由或给显示名自动加后缀 |
 | Anthropic 请求被桥拒绝 | 排查官方 SDK 的 `?beta=true` 与允许的协议 header；不放开任意查询和任意转发目标 |
