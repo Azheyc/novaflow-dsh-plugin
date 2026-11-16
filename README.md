@@ -1,12 +1,12 @@
 # NovaFlow for DeepSeek Harness
 
-版本 **2.4.0**，面向 DeepSeek Harness **0.2.2-rc.2**。通过 NovaFlow 浏览器设备授权登录，使用 DSH 官方模型配置管理连接与思考深度，无需复制平台 API Key。
+版本 **2.4.1**，兼容 DeepSeek Harness **0.2.2-rc.2 和 0.2.2-rc.3**。通过 NovaFlow 浏览器设备授权登录，使用 DSH 官方模型配置管理连接与思考深度，无需复制平台 API Key。
 
 ## 获取与安装
 
 源码仓库：[Azheyc/novaflow-dsh-plugin](https://github.com/Azheyc/novaflow-dsh-plugin)。
 
-从 [GitHub Releases](https://github.com/Azheyc/novaflow-dsh-plugin/releases) 下载与当前DSH版本匹配的 `.tgz` 安装包，通过DSH官方插件管理能力安装并启用。Release同时提供 `SHA256SUMS`，用于核对下载文件。当前仅适配DSH **0.2.2-rc.2**；详细步骤见[安装与快速开始](docs/GETTING_STARTED.md)。
+从 [GitHub Releases](https://github.com/Azheyc/novaflow-dsh-plugin/releases) 下载与当前DSH版本匹配的 `.tgz` 安装包，通过DSH官方插件管理能力安装并启用。Release同时提供 `SHA256SUMS`，用于核对下载文件。2.4.1明确适配DSH **0.2.2-rc.2、0.2.2-rc.3**，不自动放行后续未验证版本；详细步骤见[安装与快速开始](docs/GETTING_STARTED.md)。
 
 这是独立插件包，无需替换DSH应用。仓库保留 `private:true`，不通过npm公共仓库发布；GitHub源码仓库和Release安装包公开提供。
 

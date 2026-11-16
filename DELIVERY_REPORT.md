@@ -1,6 +1,6 @@
 # 交付记录入口
 
-当前实现版本为2.4.0，适配DSH 0.2.2-rc.2。各版本的应用、资源与测试证据维护在[验证记录](VERIFICATION.md)；后续交付步骤与必记信息见[测试与发布](docs/RELEASE.md)。
+当前实现版本为2.4.1，兼容DSH 0.2.2-rc.2与0.2.2-rc.3。2026-11-16完成rc.3兼容核查，169项测试通过，官方管理器应用成功，Host与关键Client Slot均已激活；本轮未重新执行付费请求或视觉验收。以下文档整理和首次GitHub发布段落为2.4.0历史。各版本的应用、资源与测试证据维护在[验证记录](VERIFICATION.md)；后续交付步骤与必记信息见[测试与发布](docs/RELEASE.md)。
 
 2026-11-13文档整理新增了[文档索引](docs/README.md)、[安装与快速开始](docs/GETTING_STARTED.md)、[开发手册](docs/DEVELOPMENT.md)、[测试与发布](docs/RELEASE.md)、[故障排查](docs/TROUBLESHOOTING.md)，并更新了根目录入口。此次仅文档变更，未改运行逻辑、安装、重载或重新打包；现有2.4.0 tarball不因此获得新增文档。
 

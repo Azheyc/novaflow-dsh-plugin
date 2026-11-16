@@ -6,6 +6,7 @@ node_modules/
 dist/
 build/
 *.tgz
+*.tgz.sha256
 
 # 编辑器
 .vscode/

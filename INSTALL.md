@@ -1,6 +1,6 @@
 # 安装说明
 
-适用：插件2.4.0、DSH 0.2.2-rc.2。安装、升级和停用步骤统一维护在[安装与快速开始](docs/GETTING_STARTED.md#安装升级与停用)。
+适用：插件2.4.1、DSH 0.2.2-rc.2／0.2.2-rc.3。安装、升级和停用步骤统一维护在[安装与快速开始](docs/GETTING_STARTED.md#安装升级与停用)。
 
 通过DSH官方插件管理器安装，不手工修改profile或用shell npm安装到profile。推荐插件必须登录后由用户在弹窗确认，才使用官方安装器和npmmirror执行。完整行为见[使用说明](README.md)。
 

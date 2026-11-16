@@ -1,6 +1,6 @@
 # NovaFlow 插件文档索引
 
-适用版本：NovaFlow 插件 **2.4.0**，DeepSeek Harness **0.2.2-rc.2**，Node.js **24 及以上**。整理日期：2026-11-13。
+适用版本：NovaFlow 插件 **2.4.1**，DeepSeek Harness **0.2.2-rc.2、0.2.2-rc.3**，Node.js **24 及以上**。核对日期：2026-11-16。
 
 本文档描述独立的 DSH 插件包 `@local/novaflow-dsh-plugin`。平台文档中已归档的旧 DSH 桌面客户端是另一项目，不能用其交付记录证明本插件状态。
 

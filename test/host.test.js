@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { apply, Config } from '../index.js'
+import { RELEASE_VERSION } from '../src/release.js'
 
 test('Host activates against actual installed libraries; management route is owner-only and schema bounded', async t => {
   const effects = [], routes = [], webRoutes = [], tools = [], records = new Map()
@@ -44,7 +45,7 @@ test('Host activates against actual installed libraries; management route is own
   account.publish({connected:true,hasCredential:true})
   const connected=await tools[0].execute({action:'state'})
   assert.equal(connected.value.pluginSetup.confirmationRequired,true)
-  assert.equal(connected.value.delivery.version,'2.4.0')
+  assert.equal(connected.value.delivery.version,RELEASE_VERSION)
   const id=connected.value.pluginSetup.confirmationId
   await tools[0].execute({action:'retry_plugins'})
   await new Promise(resolve=>setImmediate(resolve))

@@ -1,4 +1,4 @@
-export const RELEASE_VERSION = '2.4.0'
+export const RELEASE_VERSION = '2.4.1'
 export const INSTALL_FLOW = 'user-confirmed-official-installer-v1'
 
 /** Client graph facts identify the actual revisioned resource this Host serves. */

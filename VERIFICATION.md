@@ -1,4 +1,18 @@
-# 验证记录：2.4.0 用户确认后直接安装与前后端一致性
+# NovaFlow 插件验证记录
+
+## 2.4.1：DSH 0.2.2-rc.3 兼容
+
+2026-11-16。当前官方Desktop的DSH为0.2.2-rc.3，自带Node24.21.0。修改前官方库存将2.4.0列为 `incompatible-version`，原因是 `engines.dsh=0.2.2-rc.2`。原167项测试已先在rc.3完整通过，覆盖真实随附Config、catalog、adapter、SDK、MCP客户端及回环HTTP。
+
+通过当前Host Inspect核对connection、tools、webServer、configEditor、pluginManager、mcpManager、storageDomain、clientModules等契约，没有发现必须改写的业务调用。插件升级为2.4.1，清单及锁文件声明 `0.2.2-rc.2 || 0.2.2-rc.3`，保留已有rc.2支持且不放行rc.4、正式0.2.2或其他未验证版本。未创建版本豁免，未关闭官方兼容校验。新增2项版本准入与运行时／锁文件一致性测试，使用当前安装随附semver。Host测试的旧版本硬编码改为发布常量。
+
+最终**169项测试通过，0失败、0跳过**，`npm run check` 与 `git diff --check` 通过。运行逻辑、登录、原生模型和用户确认安装门槛保持原有规则；没有代用户确认推荐插件或执行真实模型／媒体付费调用。
+
+通过官方 `set_bundle enabled=true` 重新评估已安装的本地链接，返回 `application=applied`、无warnings。随后的官方库存确认版本2.4.1，无兼容错误；`include:novaflow-account` 为enabled且fiberPhase=active。初次Client Inspect未响应，应用后再次查询成功：`shell.overlay` 中 `novaflow-plugin-install-confirmation` active，`settings.models.footer` 中 `novaflow-native-model-guidance` active，`settings.launcher` 已注册且rc.3仍提供wide／openSettings。没有启动替代GUI服务器。
+
+本轮没有重新执行浏览器点击、截图、主题视觉、Windows实机或外部CDN完整链路验收。媒体MCP同名配置冲突的条件性风险仍按排查手册处理；Host active不等于每个媒体工具已连接健康。本轮不把旧会话的账户连接、余额或工具目录当作rc.3现场数据。rc.2支持以此前完整验证与本轮未改业务接口为依据，当前机器仅安装rc.3，未重新启动一套rc.2实机环境。
+
+以下为2.4.0及更早版本历史证据。
 
 ## GitHub 首次发布前核验
 

@@ -1,6 +1,6 @@
 # 故障排查
 
-适用：插件 2.4.0，DSH 0.2.2-rc.2。先记录插件版本、DSH 版本、操作系统、错误码和脱敏状态；定位源码见[开发手册](DEVELOPMENT.md)，实际分发核验见[测试与发布](RELEASE.md)。
+适用：插件 2.4.1，DSH 0.2.2-rc.2／0.2.2-rc.3。先记录插件版本、DSH 版本、操作系统、错误码和脱敏状态；定位源码见[开发手册](DEVELOPMENT.md)，实际分发核验见[测试与发布](RELEASE.md)。
 
 ## 优先检查的状态
 
@@ -12,7 +12,7 @@
 
 | 现象 | 检查与处理 |
 |---|---|
-| 点击后仍打开新会话或预填安装请求 | 当前2.4.0已移除该路径。比较 Host `delivery.version/installFlow` 与 `delivery.clientURL` 实际响应，确认正在看的 GUI 和客户端资源；仅升级磁盘包或刷新不能替代修复旧源码 |
+| 点击后仍打开新会话或预填安装请求 | 自2.4.0起已移除该路径。比较 Host `delivery.version/installFlow` 与 `delivery.clientURL` 实际响应，确认正在看的 GUI 和客户端资源；仅升级磁盘包或刷新不能替代修复旧源码 |
 | Host 新、界面旧 | 先看官方安装是否 applied，再核对模块图提供的 revision 和实际 Client；刷新既有 GUI，Inspect 检查 `shell.overlay` 的新弹窗 ID |
 | 声称 HMR 但没有变化 | 核对同一 checkout 的 Web watcher 是否在运行；不启动另一服务器，不把静态文件正确当成现有页面已更新 |
 | 页面注册成功但显示异常 | Slot active 只证明注册。另行检查浏览器点击、焦点和主题；没有截图或交互证据时保留“未做视觉验收” |

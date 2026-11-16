@@ -1,6 +1,6 @@
 # 测试与发布
 
-适用：插件 2.4.0，DSH 0.2.2-rc.2。架构与接口见[开发手册](DEVELOPMENT.md)，已执行的历史证据见[验证记录](../VERIFICATION.md)。下文命令均在本插件包根目录运行。
+适用：插件 2.4.1，DSH 0.2.2-rc.2／0.2.2-rc.3。架构与接口见[开发手册](DEVELOPMENT.md)，已执行的历史证据见[验证记录](../VERIFICATION.md)。下文命令均在本插件包根目录运行。
 
 ## 1. 准备开发环境
 
@@ -29,6 +29,7 @@ ELECTRON_RUN_AS_NODE=1 "$DSH_NODE_EXECUTABLE" --test --test-reporter=dot test/*.
 | 媒体工具与文件 | [媒体服务测试](../test/media-service.test.js)、[MCP 测试](../test/media-mcp.test.js)；未知提交结果、恢复、冲突和访问边界 |
 | 推荐安装 | [确认门槛测试](../test/plugin-install-flow.test.js)、[安装队列测试](../test/plugin-bootstrap.test.js)、[运行时测试](../test/package-runtime.test.js)、Host 测试 |
 | Client 文案与分发 | [分发契约测试](../test/client-contract.test.js)；双语字典、禁止会话草稿路径、release 常量与真实资源地址 |
+| DSH版本准入 | [兼容性测试](../test/runtime-compatibility.test.js)；允许已验证rc.2／rc.3，拒绝未验证版本，并核对当前运行时与锁文件 |
 | 生命周期回归 | [回归测试](../test/regressions.test.js)，并重跑相关模块的卸载／取消用例 |
 
 发布前执行全量测试和语法检查。构建脚本运行的是入口语法检查及分发契约／确认门槛两组测试，**不包含完整测试套件**。
@@ -55,7 +56,7 @@ bash build.sh
 
 [构建脚本](../build.sh)依次执行两个入口语法检查、两组契约测试、`npm pack --ignore-scripts`。脚本要求 PATH 中的 node/npm 对应准备好的开发环境；它不自动配置 Electron 运行时、不安装到 profile、不重载当前 GUI。
 
-输出文件名由包名和实际版本决定，例如 `local-novaflow-dsh-plugin-2.4.0.tgz`。分发清单由包清单中的 `files` 控制：源码、补丁、locale、docs、测试、验证记录和构建脚本均被纳入；README 由 npm 自动纳入。根目录的其他说明不应被默认视为已经进入包。
+输出文件名由包名和实际版本决定，例如 `local-novaflow-dsh-plugin-2.4.1.tgz`。分发清单由包清单中的 `files` 控制：源码、补丁、locale、docs、测试、验证记录和构建脚本均被纳入；README 由 npm 自动纳入。根目录的其他说明不应被默认视为已经进入包。
 
 交付前检查打包文件列表和包内版本、Client 内容、双语资源、文档链接。可先使用以下只读预览：
 
